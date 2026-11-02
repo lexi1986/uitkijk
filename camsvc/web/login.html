@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#090e18">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Camera's">
+  <title>Camera's – inloggen</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* Midnight Electric v1.0 — zelfde tokens als index.html */
+    :root {
+      color-scheme: dark;
+      --me-bg: #090e18;
+      --me-surface: #131c2b;
+      --me-elevated: #1d2a3d;
+      --me-border: #2b3a50;
+      --me-border-strong: #39516c;
+      --me-text: #f3f7fc;
+      --me-text-secondary: #94a4ba;
+      --me-primary: #39d8f4;
+      --me-danger: #fb7185;
+      --me-primary-border: rgba(57, 216, 244, 0.45);
+      --me-danger-soft: rgba(251, 113, 133, 0.14);
+      --me-glow-subtle: 0 0 0 1px rgba(57, 216, 244, 0.10), 0 0 18px rgba(57, 216, 244, 0.075);
+      --me-shadow-card: 0 6px 22px rgba(0, 0, 0, 0.12);
+      --me-radius-md: 12px;
+      --me-radius-lg: 20px;
+      --me-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--me-bg); color: var(--me-text); font-family: var(--me-font); -webkit-font-smoothing: antialiased; }
+    body { display: grid; place-items: center; min-height: 100dvh; padding: 16px; }
+    .card { width: min(400px, 100%); background: var(--me-surface); border: 1px solid var(--me-border); border-radius: var(--me-radius-lg); box-shadow: var(--me-shadow-card); padding: 1.75rem 1.5rem; display: grid; gap: 1rem; }
+    .logo { width: 3rem; height: 3rem; border-radius: 50%; display: grid; place-items: center; background: var(--me-elevated); border: 1px solid var(--me-border-strong); color: var(--me-primary); }
+    .logo svg { width: 1.4rem; height: 1.4rem; }
+    h1 { margin: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: -.02em; }
+    p { margin: 0; color: var(--me-text-secondary); font-size: .92rem; line-height: 1.5; }
+    label { display: grid; gap: .4rem; font-size: .82rem; color: var(--me-text-secondary); }
+    input { font: inherit; font-size: 1rem; min-height: 2.75rem; padding: .5rem .8rem; border-radius: var(--me-radius-md); background: var(--me-elevated); color: var(--me-text); border: 1px solid var(--me-border); }
+    input:focus { outline: none; border-color: var(--me-primary-border); box-shadow: var(--me-glow-subtle); }
+    #code { letter-spacing: .12em; text-transform: uppercase; font-variant-numeric: tabular-nums; }
+    button { font: inherit; font-size: .95rem; font-weight: 600; min-height: 2.9rem; border-radius: var(--me-radius-md); border: 1px solid var(--me-primary); background: var(--me-primary); color: var(--me-bg); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: .5rem; }
+    button:hover:not(:disabled) { box-shadow: var(--me-glow-subtle); }
+    button:disabled { opacity: .55; cursor: default; }
+    button:focus-visible, input:focus-visible { outline: 2px solid var(--me-primary); outline-offset: 3px; }
+    .err { display: none; padding: .6rem .8rem; border-radius: var(--me-radius-md); background: var(--me-danger-soft); color: var(--me-danger); font-size: .86rem; }
+    .err.show { display: block; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L20 3m-3 3l2 2m-4 0l2 2"/></svg>
+    </div>
+    <h1 id="title">Camera's</h1>
+    <p id="intro">Log in met je passkey (Face ID of Touch ID).</p>
+
+    <div id="setup" hidden>
+      <label>Koppelcode
+        <input id="code" autocomplete="one-time-code" placeholder="XXXX-XXXX-XXXX" maxlength="14">
+      </label>
+    </div>
+    <label id="nameRow" hidden>Naam van dit apparaat
+      <input id="name" placeholder="bijv. MacBook van Sam" maxlength="40">
+    </label>
+
+    <div class="err" id="err" role="alert"></div>
+    <button id="go">Inloggen met passkey</button>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    // WebAuthn werkt met ArrayBuffers; de server praat base64url
+    const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const unb64 = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+    let setup = false;
+    // terug naar waar je heen wilde (bijv. een opname uit een melding); alleen eigen paden
+    const nextUrl = () => { const n = new URLSearchParams(location.search).get("next") || "/"; return n.startsWith("/") && !n.startsWith("//") ? n : "/"; };
+
+    function fail(msg) { $("err").textContent = msg; $("err").classList.add("show"); $("go").disabled = false; }
+    async function post(path, body) {
+      const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.detail || "Er ging iets mis");
+      return data;
+    }
+    const credJSON = (c) => ({
+      id: c.id, rawId: b64(c.rawId), type: c.type,
+      authenticatorAttachment: c.authenticatorAttachment,
+      clientExtensionResults: c.getClientExtensionResults(),
+      response: Object.fromEntries(Object.entries({
+        clientDataJSON: c.response.clientDataJSON, attestationObject: c.response.attestationObject,
+        authenticatorData: c.response.authenticatorData, signature: c.response.signature,
+        userHandle: c.response.userHandle,
+      }).filter(([, v]) => v).map(([k, v]) => [k, b64(v)]).concat(
+        c.response.getTransports ? [["transports", c.response.getTransports()]] : [])),
+    });
+
+    async function register() {
+      const code = $("code").value.trim();
+      const { challenge_id, options: o } = await post("/api/auth/register/options", { code });
+      o.challenge = unb64(o.challenge);
+      o.user.id = unb64(o.user.id);
+      o.excludeCredentials = (o.excludeCredentials || []).map((c) => ({ ...c, id: unb64(c.id) }));
+      const cred = await navigator.credentials.create({ publicKey: o });
+      await post("/api/auth/register", { challenge_id, credential: credJSON(cred), name: $("name").value.trim() || "Apparaat", code });
+    }
+    async function login() {
+      const { challenge_id, options: o } = await post("/api/auth/login/options");
+      o.challenge = unb64(o.challenge);
+      o.allowCredentials = (o.allowCredentials || []).map((c) => ({ ...c, id: unb64(c.id) }));
+      const cred = await navigator.credentials.get({ publicKey: o });
+      await post("/api/auth/login", { challenge_id, credential: credJSON(cred) });
+    }
+
+    $("go").addEventListener("click", async () => {
+      $("err").classList.remove("show");
+      $("go").disabled = true;
+      try {
+        await (setup ? register() : login());
+        location.replace(nextUrl());
+      } catch (e) {
+        fail(e.name === "NotAllowedError" ? "Geannuleerd of niet toegestaan. Probeer het opnieuw." : e.message);
+      }
+    });
+
+    (async () => {
+      if (!window.PublicKeyCredential) { fail("Deze browser of verbinding ondersteunt geen passkeys. Open de pagina via https://."); $("go").disabled = true; return; }
+      const s = await fetch("/api/auth/state", { cache: "no-store" }).then((r) => r.json()).catch(() => ({}));
+      if (s.logged_in) { location.replace(nextUrl()); return; }
+      setup = !!s.setup;
+      if (setup) {
+        $("title").textContent = "Passkey koppelen";
+        $("intro").textContent = "Nog geen passkey. Vul de eenmalige koppelcode in en maak een passkey op dit apparaat; met iCloud-sleutelhanger staat hij daarna ook op je andere Apple-apparaten.";
+        $("setup").hidden = false; $("nameRow").hidden = false;
+        $("go").textContent = "Passkey aanmaken";
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+blueprint:
+  name: Uitkijk – aanwezigheid doorgeven
+  description: >-
+    Geeft thuiskomen en weggaan van bewoners door aan camera-service. Een persoon zonder herkend
+    gezicht in de 5 minuten na thuiskomst wordt dan "waarschijnlijk <naam>" en geeft geen
+    rondhang-alarm. De naam van de person-entiteit moet gelijk zijn aan die bij Gezichten.
+  domain: automation
+  author: Uitkijk
+  source_url: https://github.com/lexi1986/uitkijk/blob/main/homeassistant/blueprints/automation/camera_service/aanwezigheid.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    personen:
+      name: Bewoners
+      selector:
+        entity:
+          domain: person
+          multiple: true
+    topic_prefix:
+      name: MQTT-prefix van camera-service
+      default: camsvc
+      selector:
+        text: {}
+
+mode: queued
+max: 10
+
+variables:
+  prefix: !input topic_prefix
+
+triggers:
+  - trigger: state
+    entity_id: !input personen
+    to: home
+    id: thuis
+  - trigger: state
+    entity_id: !input personen
+    from: home
+    not_to: ["unavailable", "unknown"]
+    id: weg
+
+actions:
+  - action: mqtt.publish
+    data:
+      topic: "{{ prefix }}/server/aanwezig"
+      payload: "{{ {'name': trigger.to_state.name, 'home': trigger.id == 'thuis'} | to_json }}"

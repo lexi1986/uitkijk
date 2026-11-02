@@ -1,0 +1,132 @@
+# camera-service configuratie
+# Met Docker maakt de installatiewizard data/config.yaml voor je; dit bestand toont alle opties.
+# Zonder Docker: kopieer naar /etc/camera-service/config.yaml en pas aan.
+# Na wijzigen: systemctl restart camera-service
+
+log_level: INFO
+
+storage:
+  clips_dir: /clips                 # apart mountpoint in de LXC
+  state_dir: /var/lib/camera-service
+  retention_days: 7                 # clips ouder dan dit worden verwijderd
+  retention_days_by_label:          # per label langer of korter bewaren
+    persoon: 30
+    aanbellen: 30
+  max_gb: 25                        # daarboven gaan de oudste clips weg
+
+api:
+  host: 0.0.0.0                     # achter Caddy (HTTPS, passkeys): 127.0.0.1
+  port: 8080
+  # Adres waarmee HA en je telefoon (thuis/VPN) de service bereiken.
+  # Wordt gebruikt in de clip- en snapshot-links in Home Assistant.
+  public_url: http://192.168.1.20:8080
+
+mqtt:
+  host: 192.168.1.5                 # Home Assistant met de Mosquitto add-on
+  port: 1883
+  username: camera-service
+  password: VERANDER_MIJ
+  topic_prefix: camsvc
+  discovery_prefix: homeassistant
+
+model:
+  path: /opt/camera-service/models/yolo11n.onnx   # zie deploy/export-model.sh
+  # Google Coral (USB): wordt gebruikt als de Coral werkt, anders `path` op de CPU.
+  # install.sh zet deze regel zelf zodra het Coral-model er is.
+  # coral_path: /opt/camera-service/models/yolo11n_edgetpu.tflite
+  device: AUTO                      # alleen voor OpenVINO (.xml): AUTO = iGPU, anders CPU
+  input_size: 320
+
+# Live beeld op de webpagina via go2rtc (bijv. de go2rtc-app in Home Assistant). Per camera is de
+# streamnaam in go2rtc standaard gelijk aan de cameranaam; anders `live: <naam>` bij de camera.
+# live:
+#   go2rtc_url: http://192.168.1.5:1984
+
+# Beschrijvingen van snapshots door een lokaal vision-model (Ollama), alleen via een SSH-tunnel
+# op loopback (zie README "AI-beschrijvingen"). Uit tenzij hier aangezet.
+# ai:
+#   enabled: true
+#   base_url: http://127.0.0.1:11435     # de tunnel; andere adressen worden geweigerd
+#   model: qwen3-vl:4b-instruct          # beter dan gemma3:4b bij infrarood en personen
+#   labels: [persoon, voertuig, aanbellen]
+#   camera_interval: 30                  # hooguit één beschrijving per camera per 30 s
+#   global_per_minute: 6
+
+# Standaardwaarden voor alle camera's; per camera te overschrijven.
+defaults:
+  pre_seconds: 10                   # pre-buffer (begint op een keyframe, dus 10-12 s)
+  post_seconds: 30                  # doorlopen na de laatste detectie
+  max_clip_seconds: 300
+  record_audio: true
+  hwaccel: auto                     # auto / vaapi / qsv / none (zie README)
+  motion:
+    fps: 5                          # zoveel frames per seconde worden bekeken
+    width: 320                      # verkleind voor bewegingsdetectie
+    threshold: 25                   # pixelverschil dat als beweging telt (0-255)
+    min_area: 0.004                 # deel van het beeld dat moet bewegen (0.4%)
+    cooldown_seconds: 5
+  objects:
+    enabled: true
+    max_fps: auto                   # modelaanroepen per seconde; auto = 5 met Coral, anders 2
+    always: false                   # met Coral: ook zonder beweging naar personen kijken
+    min_score: 0.55
+    min_hits: 2                     # zo vaak gezien binnen het venster = bevestigd
+    hit_window_seconds: 3
+    labels:
+      persoon: true
+      voertuig: true
+      dier: false
+
+# Namen: alleen a-z, 0-9 en _. Ze komen terug in Home Assistant (binary_sensor.cam_<naam>_persoon).
+# Pas de namen, IP-adressen en inloggegevens aan.
+cameras:
+  # --- Foscam VD1 videodeurbel ---------------------------------------------------------
+  # RTSP staat bij Foscam op poort 88 (soms 554): videoMain = hoge kwaliteit, videoSub = laag.
+  # Test eerst met VLC: Media → Netwerkstroom openen → de URL hieronder.
+  # De audio van de VD1 (G.711) wordt in de clips automatisch omgezet naar AAC.
+  - name: deurbel
+    friendly_name: Deurbel
+    main_url: rtsp://gebruiker:wachtwoord@192.168.1.31:88/videoMain
+    sub_url: rtsp://gebruiker:wachtwoord@192.168.1.31:88/videoSub
+    # H.264 Baseline (Foscam) speelt op iPhone niet via MSE: eerst WebRTC proberen.
+    live_mode: webrtc,mse
+    # Gezichtsherkenning: personen leren via de webpagina (zie README).
+    faces:
+      enabled: true
+    # Met Coral: ook iemand die stil voor de deur staat blijft gezien worden.
+    objects:
+      always: true
+    # Of via ONVIF (Foscam gebruikt meestal poort 888):
+    # onvif: {host: 192.168.1.31, port: 888, username: gebruiker, password: wachtwoord}
+    mask:
+      # - [[0, 0], [100, 0], [100, 15], [0, 15]]     # bovenste strook (bijv. straat)
+
+  # --- Reolink 1 ------------------------------------------------------------------------
+  # Reolink: h264Preview_01_main / h264Preview_01_sub (of Preview_01_main/_sub).
+  - name: oprit
+    friendly_name: Oprit
+    main_url: rtsp://gebruiker:wachtwoord@192.168.1.32:554/h264Preview_01_main
+    sub_url: rtsp://gebruiker:wachtwoord@192.168.1.32:554/h264Preview_01_sub
+    # onvif: {host: 192.168.1.32, port: 8000, username: gebruiker, password: wachtwoord}
+    mask:
+
+  # --- Reolink 2 ------------------------------------------------------------------------
+  - name: tuin
+    friendly_name: Tuin
+    main_url: rtsp://gebruiker:wachtwoord@192.168.1.33:554/h264Preview_01_main
+    sub_url: rtsp://gebruiker:wachtwoord@192.168.1.33:554/h264Preview_01_sub
+    mask:
+    # Per camera kun je alles uit `defaults` overschrijven, bijv. ook dieren in de tuin:
+    objects:
+      labels:
+        dier: true
+
+# Optioneel: inloggen met passkeys (vraagt HTTPS met een domeinnaam, bijv. Caddy ervoor)
+# auth:
+#   enabled: true
+#   rp_id: camera.example.nl
+#   origin: https://camera.example.nl
+#   session_days: 90
+
+# Dagoverzicht naar Home Assistant (leeg = uit)
+# summary_time: "22:00"

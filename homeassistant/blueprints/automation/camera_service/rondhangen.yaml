@@ -1,0 +1,68 @@
+blueprint:
+  name: Uitkijk – onbekende persoon hangt rond
+  description: >-
+    Dringende melding (doorbreekt Focus) als camera-service een niet-herkende persoon langer dan de
+    ingestelde tijd bij een camera ziet. Waarschijnlijk vals alarm en net thuisgekomen bewoners
+    tellen al niet mee.
+  domain: automation
+  author: Uitkijk
+  source_url: https://github.com/lexi1986/uitkijk/blob/main/homeassistant/blueprints/automation/camera_service/rondhangen.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    sensors:
+      name: Rondhangen-sensoren
+      description: binary_sensor.cam_<naam>_rondhangen van camera-service
+      selector:
+        entity:
+          domain: binary_sensor
+          integration: mqtt
+          multiple: true
+    notify_targets:
+      name: Meldingsdiensten
+      description: Bijv. notify.mobile_app_iphone_van_sam
+      selector:
+        text:
+          multiple: true
+    app_url:
+      name: Adres van de camera-webpagina
+      selector:
+        text:
+          type: url
+
+mode: parallel
+max: 5
+
+variables:
+  targets: !input notify_targets
+  app: !input app_url
+
+triggers:
+  - trigger: state
+    entity_id: !input sensors
+    to: "on"
+
+actions:
+  - variables:
+      cam: "{{ trigger.entity_id | replace('binary_sensor.cam_', '') | replace('_rondhangen', '') }}"
+      naam_cam: "{{ state_attr(trigger.entity_id, 'friendly_name') | replace(' Rondhangen', '') }}"
+  - repeat:
+      for_each: "{{ targets }}"
+      sequence:
+        - action: "{{ repeat.item }}"
+          data:
+            title: "⚠️ {{ naam_cam }}: onbekende persoon hangt rond"
+            message: "{{ now().strftime('%H:%M') }} – al een tijdje iemand in beeld die niet herkend wordt."
+            data:
+              image: "/api/camera_proxy/camera.cam_{{ cam }}_snapshot"
+              url: "{{ app }}/?live={{ cam }}"
+              group: camera-rondhangen
+              push:
+                interruption-level: time-sensitive
+              actions:
+                - action: URI
+                  title: Live bekijken
+                  uri: "{{ app }}/?live={{ cam }}"
+                - action: URI
+                  title: Opname
+                  uri: "{{ app }}/?camera={{ cam }}&open=laatste"

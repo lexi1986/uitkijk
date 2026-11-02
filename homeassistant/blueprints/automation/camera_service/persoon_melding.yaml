@@ -1,0 +1,124 @@
+blueprint:
+  name: Uitkijk – persoon gezien
+  description: >-
+    Melding met snapshot als camera-service een persoon bij een camera bevestigt, met de knoppen
+    "Live bekijken" en "Opname". Optioneel: bekenden (geleerde gezichten) overslaan en alleen
+    melden als niemand thuis is.
+  domain: automation
+  author: Uitkijk
+  source_url: https://github.com/lexi1986/uitkijk/blob/main/homeassistant/blueprints/automation/camera_service/persoon_melding.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    camera:
+      name: Camera
+      icon: mdi:cctv
+      input:
+        persoon_sensor:
+          name: Persoon-sensor
+          description: binary_sensor.cam_<naam>_persoon van camera-service
+          selector:
+            entity:
+              domain: binary_sensor
+              integration: mqtt
+        gezicht_sensor:
+          name: Gezicht-sensor (optioneel)
+          description: sensor.cam_<naam>_gezicht; leeg als gezichtsherkenning uit staat
+          default: []
+          selector:
+            entity:
+              domain: sensor
+              integration: mqtt
+    melding:
+      name: Melding
+      icon: mdi:cellphone-message
+      input:
+        notify_targets:
+          name: Meldingsdiensten
+          description: "Bijv. notify.mobile_app_iphone_van_sam (Ontwikkelaarshulpmiddelen → Acties, zoek op notify)."
+          selector:
+            text:
+              multiple: true
+        app_url:
+          name: Adres van de camera-webpagina
+          description: Bijv. https://camera.voorbeeld.nl of http://192.168.1.20:8080
+          selector:
+            text:
+              type: url
+        afkoelen:
+          name: Afkoeltijd
+          description: Na een melding zo lang geen nieuwe voor deze camera.
+          default: 5
+          selector:
+            number: { min: 0, max: 60, unit_of_measurement: min }
+    voorwaarden:
+      name: Voorwaarden
+      icon: mdi:filter-outline
+      collapsed: true
+      input:
+        bekenden_overslaan:
+          name: Geen melding bij bekenden
+          default: true
+          selector:
+            boolean: {}
+        alleen_weg:
+          name: Alleen als deze personen allemaal weg zijn (optioneel)
+          default: []
+          selector:
+            entity:
+              domain: person
+              multiple: true
+
+mode: single
+max_exceeded: silent
+
+variables:
+  targets: !input notify_targets
+  app: !input app_url
+  gezicht: !input gezicht_sensor
+  overslaan: !input bekenden_overslaan
+  afkoel_min: !input afkoelen
+  bewoners: !input alleen_weg
+  sensor: !input persoon_sensor
+  cam: "{{ sensor | replace('binary_sensor.cam_', '') | replace('_persoon', '') }}"
+  naam_cam: "{{ state_attr(sensor, 'friendly_name') | replace(' Persoon', '') }}"
+
+triggers:
+  - trigger: state
+    entity_id: !input persoon_sensor
+    to: "on"
+
+conditions:
+  - "{{ bewoners | length == 0 or bewoners | select('is_state', 'home') | list | length == 0 }}"
+
+actions:
+  - if:
+      - "{{ gezicht | length > 0 }}"
+    then:
+      - wait_template: "{{ states(gezicht) not in ['geen', 'unknown', 'unavailable'] }}"
+        timeout: { seconds: 3 }
+        continue_on_timeout: true
+  - variables:
+      wie: "{{ states(gezicht) if gezicht | length > 0 and states(gezicht) not in ['geen', 'onbekend', 'unknown', 'unavailable'] else '' }}"
+  - condition: template
+    value_template: "{{ not (overslaan and wie) }}"
+  - repeat:
+      for_each: "{{ targets }}"
+      sequence:
+        - action: "{{ repeat.item }}"
+          data:
+            title: "{{ '👤 ' ~ wie ~ ' bij ' ~ naam_cam if wie else '📷 Persoon bij ' ~ naam_cam }}"
+            message: "{{ now().strftime('%H:%M') }}"
+            data:
+              image: "/api/camera_proxy/camera.cam_{{ cam }}_snapshot"
+              url: "{{ app }}/?live={{ cam }}"
+              group: "camera-{{ cam }}"
+              actions:
+                - action: URI
+                  title: Live bekijken
+                  uri: "{{ app }}/?live={{ cam }}"
+                - action: URI
+                  title: Opname
+                  uri: "{{ app }}/?camera={{ cam }}&open=laatste"
+  - delay:
+      minutes: "{{ afkoel_min }}"

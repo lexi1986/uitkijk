@@ -1,0 +1,97 @@
+blueprint:
+  name: Uitkijk – aanbellen
+  description: >-
+    Als iemand aanbelt: camera-service start meteen een opname (met de seconden ervoor) en zoekt
+    een gezicht. Je krijgt direct een melding; wordt de persoon binnen een paar seconden herkend,
+    dan wordt de melding vervangen door een met de naam.
+  domain: automation
+  author: Uitkijk
+  source_url: https://github.com/lexi1986/uitkijk/blob/main/homeassistant/blueprints/automation/camera_service/aanbellen.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    bel:
+      name: Deurbelknop
+      description: De entiteit die verandert bij aanbellen (binary_sensor, event of knop van je deurbel).
+      selector:
+        entity:
+          domain: [binary_sensor, event, input_button, button]
+    camera_naam:
+      name: Naam van de deurbelcamera in camera-service
+      description: Zoals in de config, bijv. deurbel (zonder spaties).
+      default: deurbel
+      selector:
+        text: {}
+    notify_targets:
+      name: Meldingsdiensten
+      selector:
+        text:
+          multiple: true
+    app_url:
+      name: Adres van de camera-webpagina
+      selector:
+        text:
+          type: url
+    topic_prefix:
+      name: MQTT-prefix van camera-service
+      default: camsvc
+      selector:
+        text: {}
+
+mode: restart
+
+variables:
+  targets: !input notify_targets
+  app: !input app_url
+  cam: !input camera_naam
+  prefix: !input topic_prefix
+  gezicht: "sensor.cam_{{ cam }}_gezicht"
+
+triggers:
+  - trigger: state
+    entity_id: !input bel
+    not_from: ["unavailable", "unknown"]
+    not_to: ["unavailable", "unknown", "off"]
+
+actions:
+  - action: mqtt.publish
+    data:
+      topic: "{{ prefix }}/{{ cam }}/trigger"
+      payload: aanbellen
+  - repeat:
+      for_each: "{{ targets }}"
+      sequence:
+        - action: "{{ repeat.item }}"
+          data:
+            title: "🔔 Er wordt aangebeld"
+            message: "Iemand staat voor de deur"
+            data:
+              image: "/api/camera_proxy/camera.cam_{{ cam }}_snapshot"
+              url: "{{ app }}/?live={{ cam }}"
+              tag: camsvc-aanbellen
+              push:
+                interruption-level: time-sensitive
+              actions:
+                - action: URI
+                  title: Live bekijken
+                  uri: "{{ app }}/?live={{ cam }}"
+  - wait_template: "{{ states(gezicht) not in ['geen', 'onbekend', 'unknown', 'unavailable'] }}"
+    timeout: { seconds: 6 }
+    continue_on_timeout: false
+  - repeat:
+      for_each: "{{ targets }}"
+      sequence:
+        - action: "{{ repeat.item }}"
+          data:
+            title: "🔔 {{ states(gezicht) }} staat voor de deur"
+            message: Herkend door de deurbelcamera
+            data:
+              image: "/api/camera_proxy/camera.cam_{{ cam }}_snapshot"
+              url: "{{ app }}/?live={{ cam }}"
+              tag: camsvc-aanbellen
+              push:
+                interruption-level: time-sensitive
+              actions:
+                - action: URI
+                  title: Live bekijken
+                  uri: "{{ app }}/?live={{ cam }}"

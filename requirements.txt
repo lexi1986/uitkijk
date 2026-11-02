@@ -1,0 +1,15 @@
+av==18.1.0
+numpy==2.4.6
+opencv-python-headless==5.0.0.93
+onnxruntime==1.31.1
+openvino==2026.4.1
+paho-mqtt==2.1.0
+fastapi==0.162.0
+uvicorn==0.54.0
+websockets==17.4
+fast-alpr==0.4.0
+fast-plate-ocr==1.1.0
+open-image-models==0.6.0
+PyYAML==6.0.3
+onvif-zeep==0.2.12
+webauthn==2.7.0

@@ -1,0 +1,91 @@
+blueprint:
+  name: Uitkijk – servergezondheid
+  description: >-
+    Melding als camera-service na een crash (bijv. geheugentekort) opnieuw is opgestart, als het
+    geheugen of de schijf bijna vol is, of als een camera langer dan 5 minuten geen beeld geeft.
+  domain: automation
+  author: Uitkijk
+  source_url: https://github.com/lexi1986/uitkijk/blob/main/homeassistant/blueprints/automation/camera_service/servergezondheid.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    melding_entity:
+      name: Servermelding
+      description: event.camera_service_melding
+      selector:
+        entity:
+          domain: event
+          integration: mqtt
+    geheugen:
+      name: Geheugen-sensor
+      description: sensor.camera_service_geheugen
+      selector:
+        entity:
+          domain: sensor
+          integration: mqtt
+    schijf:
+      name: Schijf-sensor
+      description: sensor.camera_service_schijf
+      selector:
+        entity:
+          domain: sensor
+          integration: mqtt
+    online:
+      name: Online-sensoren van de camera's
+      description: binary_sensor.cam_<naam>_online
+      selector:
+        entity:
+          domain: binary_sensor
+          integration: mqtt
+          multiple: true
+    notify_targets:
+      name: Meldingsdiensten (bijv. alleen de beheerder)
+      selector:
+        text:
+          multiple: true
+
+mode: parallel
+max: 5
+
+variables:
+  targets: !input notify_targets
+
+triggers:
+  - trigger: state
+    entity_id: !input melding_entity
+    not_to: ["unavailable", "unknown"]
+    id: melding
+  - trigger: numeric_state
+    entity_id: !input geheugen
+    above: 90
+    for: { minutes: 10 }
+    id: geheugen
+  - trigger: numeric_state
+    entity_id: !input schijf
+    above: 90
+    for: { minutes: 30 }
+    id: schijf
+  - trigger: state
+    entity_id: !input online
+    to: "off"
+    for: { minutes: 5 }
+    id: offline
+
+actions:
+  - variables:
+      tekst: >-
+        {% if trigger.id == 'melding' %}{{ '⚠️ camera-service herstart na een crash|Opnames tussendoor kunnen missen.' if trigger.to_state.attributes.event_type == 'herstart_na_crash' else '' }}
+        {% elif trigger.id == 'geheugen' %}🧠 camera-service: geheugen bijna vol|Al 10 minuten boven 90%. Bij 100% stopt de service.
+        {% elif trigger.id == 'schijf' %}💾 camera-service: schijf bijna vol|Oude opnames worden opgeruimd, maar controleer de opslag.
+        {% else %}📷 {{ state_attr(trigger.entity_id, 'friendly_name') | replace(' Online', '') }} offline|Al 5 minuten geen beeld. Stroom, netwerk of camera controleren.{% endif %}
+  - condition: template
+    value_template: "{{ tekst | trim != '' }}"
+  - repeat:
+      for_each: "{{ targets }}"
+      sequence:
+        - action: "{{ repeat.item }}"
+          data:
+            title: "{{ (tekst | trim).split('|')[0] }}"
+            message: "{{ (tekst | trim).split('|')[1] }}"
+            data:
+              group: camera-status

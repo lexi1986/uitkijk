@@ -1,0 +1,32 @@
+[Unit]
+Description=camera-service (videobuffer en detectie)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=camsvc
+Group=camsvc
+SupplementaryGroups=render video
+WorkingDirectory=/opt/camera-service
+# OpenVINO schrijft telemetrie-instellingen naar $HOME: geef een beschrijfbare map
+Environment=HOME=/var/lib/camera-service
+ExecStart=/opt/camera-service/.venv/bin/python -m camsvc --config /etc/camera-service/config.yaml
+Restart=always
+RestartSec=5
+# Beperkt het geheugen zodat een fout de LXC niet kan opvreten
+MemoryMax=3G
+TimeoutStopSec=30
+# nieuwe bestanden (gezichten, kleding, clips) alleen leesbaar voor de service zelf
+UMask=0077
+Nice=5
+
+# Afscherming
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/clips /var/lib/camera-service
+
+[Install]
+WantedBy=multi-user.target

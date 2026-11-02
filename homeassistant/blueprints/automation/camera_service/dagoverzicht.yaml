@@ -1,0 +1,56 @@
+blueprint:
+  name: Uitkijk – dagoverzicht
+  description: >-
+    camera-service stuurt elke avond (standaard 22:00) een samenvatting van de dag: wie er langs
+    kwam, aanbellen, pakketjes en auto's. Deze automatisering zet die als melding op je telefoon.
+  domain: automation
+  author: Uitkijk
+  source_url: https://github.com/lexi1986/uitkijk/blob/main/homeassistant/blueprints/automation/camera_service/dagoverzicht.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    summary_sensor:
+      name: Dagoverzicht-sensor
+      description: sensor.camera_dagoverzicht van camera-service
+      selector:
+        entity:
+          domain: sensor
+          integration: mqtt
+    notify_targets:
+      name: Meldingsdiensten
+      selector:
+        text:
+          multiple: true
+    app_url:
+      name: Adres van de camera-webpagina
+      selector:
+        text:
+          type: url
+
+mode: single
+
+variables:
+  targets: !input notify_targets
+  app: !input app_url
+  s: !input summary_sensor
+
+triggers:
+  - trigger: state
+    entity_id: !input summary_sensor
+    attribute: datum
+
+conditions:
+  # niet opnieuw melden als HA herstart en het bewaarde overzicht van eerder binnenkomt
+  - "{{ state_attr(s, 'datum') == now().date().isoformat() and (now() - trigger.to_state.last_updated).total_seconds() < 60 }}"
+
+actions:
+  - repeat:
+      for_each: "{{ targets }}"
+      sequence:
+        - action: "{{ repeat.item }}"
+          data:
+            title: "📋 Camera's vandaag"
+            message: "{{ state_attr(s, 'tekst') }}"
+            data:
+              tag: camera-dagoverzicht
+              url: "{{ app }}/"

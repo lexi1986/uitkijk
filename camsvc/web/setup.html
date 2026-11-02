@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#090e18">
+  <link rel="apple-touch-icon" href="/icon-180.png">
+  <title>Camera's – installatie</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* Midnight Electric v1.0 — zelfde tokens als index.html */
+    :root {
+      color-scheme: dark;
+      --me-bg: #090e18; --me-surface: #131c2b; --me-elevated: #1d2a3d; --me-border: #2b3a50; --me-border-strong: #39516c;
+      --me-text: #f3f7fc; --me-text-secondary: #94a4ba; --me-primary: #39d8f4; --me-success: #48e0b4; --me-danger: #fb7185;
+      --me-primary-border: rgba(57, 216, 244, 0.45); --me-primary-soft: rgba(57, 216, 244, 0.12);
+      --me-success-soft: rgba(72, 224, 180, 0.14); --me-danger-soft: rgba(251, 113, 133, 0.14);
+      --me-glow-subtle: 0 0 0 1px rgba(57, 216, 244, 0.10), 0 0 18px rgba(57, 216, 244, 0.075);
+      --me-shadow-card: 0 6px 22px rgba(0, 0, 0, 0.12);
+      --me-radius-md: 12px; --me-radius-card: 16px; --me-radius-lg: 20px; --me-radius-pill: 999px;
+      --me-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--me-bg); color: var(--me-text); font-family: var(--me-font); -webkit-font-smoothing: antialiased; }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 32px 16px 80px; display: grid; gap: 1.25rem; }
+    h1 { margin: 0; font-size: 1.9rem; font-weight: 700; letter-spacing: -.02em; }
+    h2 { margin: 0 0 .25rem; font-size: 1.15rem; font-weight: 600; }
+    p, .muted { margin: 0; color: var(--me-text-secondary); font-size: .92rem; line-height: 1.5; }
+    .eyebrow { font-size: .72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--me-text-secondary); }
+    .card { background: var(--me-surface); border: 1px solid var(--me-border); border-radius: var(--me-radius-lg); box-shadow: var(--me-shadow-card); padding: 1.25rem; display: grid; gap: 1rem; }
+    .cam { background: var(--me-elevated); border: 1px solid var(--me-border); border-radius: var(--me-radius-card); padding: 1rem; display: grid; gap: .8rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: .75rem; }
+    label { display: grid; gap: .35rem; font-size: .8rem; color: var(--me-text-secondary); }
+    input, select { font: inherit; font-size: 16px; min-height: 44px; padding: .5rem .8rem; border-radius: var(--me-radius-md); background: var(--me-bg); color: var(--me-text); border: 1px solid var(--me-border); width: 100%; }
+    input:focus, select:focus { outline: none; border-color: var(--me-primary-border); box-shadow: var(--me-glow-subtle); }
+    .check { display: flex; gap: .6rem; align-items: flex-start; font-size: .9rem; color: var(--me-text); }
+    .check input { width: 1.2rem; min-height: 1.2rem; margin-top: .15rem; accent-color: var(--me-primary); }
+    .check small { display: block; color: var(--me-text-secondary); font-size: .8rem; margin-top: .15rem; }
+    .btns { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+    button { font: inherit; font-size: .9rem; font-weight: 500; min-height: 44px; padding: .5rem 1rem; border-radius: var(--me-radius-md); background: var(--me-elevated); color: var(--me-text); border: 1px solid var(--me-border); cursor: pointer; }
+    button:hover:not(:disabled) { border-color: var(--me-border-strong); }
+    button.primary { background: var(--me-primary); border-color: var(--me-primary); color: var(--me-bg); font-weight: 600; }
+    button.primary:hover:not(:disabled) { box-shadow: var(--me-glow-subtle); }
+    button.link { background: none; border: 0; color: var(--me-danger); padding: .5rem; }
+    button:disabled { opacity: .55; cursor: default; }
+    button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--me-primary); outline-offset: 3px; }
+    .result { font-size: .85rem; padding: .55rem .8rem; border-radius: var(--me-radius-md); display: none; }
+    .result.ok { display: block; background: var(--me-success-soft); color: var(--me-success); }
+    .result.err { display: block; background: var(--me-danger-soft); color: var(--me-danger); }
+    .preview { width: 100%; max-width: 320px; border-radius: var(--me-radius-md); display: none; }
+    .head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+    [hidden] { display: none !important; }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div>
+      <div class="eyebrow">Installatie</div>
+      <h1>Camera's instellen</h1>
+    </div>
+
+    <section class="card" id="codeCard">
+      <div><h2>Setupcode</h2><p>Staat in het log van de service, bijv. met <code>docker compose logs camsvc</code>. Zo kan niet iedereen op je netwerk de installatie doen.</p></div>
+      <label>Setupcode <input id="code" autocomplete="one-time-code" placeholder="XXXX-XXXX" style="text-transform:uppercase;letter-spacing:.12em"></label>
+      <div class="result" id="codeRes"></div>
+      <div class="btns"><button class="primary" id="codeGo">Verder</button></div>
+    </section>
+
+    <div id="wizard" hidden>
+      <section class="card">
+        <div><h2>1. Camera's</h2><p>Kies het merk en vul het IP-adres en de inloggegevens van de camera in. Met <b>Test</b> haalt de service meteen een beeld op.</p></div>
+        <div id="cams" style="display:grid;gap:.75rem"></div>
+        <div class="btns"><button id="addCam">+ Camera toevoegen</button></div>
+      </section>
+
+      <section class="card" style="margin-top:1.25rem">
+        <div><h2>2. Home Assistant (optioneel)</h2><p>Via MQTT krijgt Home Assistant sensoren, snapshots en meldingen. Gebruik je de Mosquitto-app in HA, vul dan het adres van HA in en een HA-gebruiker. Leeg laten kan ook.</p></div>
+        <div class="grid">
+          <label>MQTT-server <input id="mqttHost" placeholder="bijv. 192.168.1.5"></label>
+          <label>Poort <input id="mqttPort" type="number" value="1883"></label>
+          <label>Gebruiker <input id="mqttUser" autocomplete="off"></label>
+          <label>Wachtwoord <input id="mqttPass" type="password" autocomplete="new-password"></label>
+        </div>
+        <div class="result" id="mqttRes"></div>
+        <div class="btns"><button id="mqttTest">Verbinding testen</button></div>
+      </section>
+
+      <section class="card" style="margin-top:1.25rem">
+        <div><h2>3. Opties</h2></div>
+        <label class="check"><input type="checkbox" id="fFaces"><span>Gezichtsherkenning<small>Mensen leren herkennen via de webpagina. Downloadt bij de eerste start ± 500 MB aan modellen. Het herkenningsmodel (InsightFace) mag alleen niet-commercieel gebruikt worden. Let op de privacyregels als je camera de straat filmt.</small></span></label>
+        <label class="check"><input type="checkbox" id="fPlates"><span>Nederlandse kentekens lezen<small>Alleen bij camera's waar je dat aanvinkt; bekende auto's geef je een naam.</small></span></label>
+        <label class="check"><input type="checkbox" id="fLive" checked><span>Live beeld via go2rtc<small>Zit in de Docker-installatie. Op de iPhone werkt live beeld via WebRTC.</small></span></label>
+        <label id="goRow">Adres van go2rtc <input id="goUrl" value="http://localhost:1984"></label>
+      </section>
+
+      <section class="card" style="margin-top:1.25rem">
+        <div><h2>4. Opslag</h2><p>Oude opnames worden automatisch opgeruimd.</p></div>
+        <div class="grid">
+          <label>Opnames bewaren (dagen) <input id="days" type="number" value="7" min="1"></label>
+          <label>Met een persoon (dagen) <input id="pdays" type="number" value="30" min="1"></label>
+          <label>Maximaal (GB) <input id="maxgb" type="number" value="50" min="1"></label>
+        </div>
+      </section>
+
+      <section class="card" style="margin-top:1.25rem">
+        <div><h2>5. Adres</h2><p>Hoe je de webpagina opent. Met een eigen domeinnaam en HTTPS (bijv. via Caddy of Nginx Proxy Manager) kun je inloggen met een passkey; zonder domein is de pagina open voor iedereen op je netwerk.</p></div>
+        <label>Adres van deze service <input id="pubUrl"></label>
+        <label>Domeinnaam voor HTTPS en passkeys (optioneel) <input id="domain" placeholder="bijv. camera.voorbeeld.nl" autocapitalize="off"></label>
+      </section>
+
+      <section class="card" style="margin-top:1.25rem">
+        <div class="result" id="saveRes"></div>
+        <div class="btns"><button class="primary" id="save">Opslaan en starten</button></div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    let code = "", brands = {}, n = 0;
+
+    async function call(path, body) {
+      const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Setup-Code": code }, body: JSON.stringify(body || {}) });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.detail || "Er ging iets mis");
+      return data;
+    }
+    function show(el, ok, text) { el.className = `result ${ok ? "ok" : "err"}`; el.textContent = text; }
+
+    function camCard() {
+      const i = n++;
+      const opts = Object.entries(brands).map(([k, b]) => `<option value="${k}">${esc(b.name)}</option>`).join("");
+      const el = document.createElement("div");
+      el.className = "cam"; el.dataset.i = i;
+      el.innerHTML = `
+        <div class="head"><b>Camera ${i + 1}</b><button class="link" data-remove>Verwijderen</button></div>
+        <div class="grid">
+          <label>Naam <input data-f="friendly_name" placeholder="bijv. Voordeur"></label>
+          <label>Merk <select data-f="brand">${opts}</select></label>
+        </div>
+        <div class="grid" data-std>
+          <label>IP-adres <input data-f="ip" placeholder="192.168.1.30" inputmode="decimal"></label>
+          <label>Poort <input data-f="port" type="number"></label>
+          <label>Gebruiker <input data-f="username" autocomplete="off"></label>
+          <label>Wachtwoord <input data-f="password" type="password" autocomplete="new-password"></label>
+        </div>
+        <div class="grid" data-custom hidden>
+          <label>RTSP-adres hoge kwaliteit <input data-f="main_url" placeholder="rtsp://gebruiker:wachtwoord@ip:554/..."></label>
+          <label>RTSP-adres lage kwaliteit (optioneel) <input data-f="sub_url" placeholder="voor detectie, bijv. 640×360"></label>
+        </div>
+        <label class="check" data-plates hidden><input type="checkbox" data-f="plates"><span>Kentekens lezen bij deze camera</span></label>
+        <div class="result" data-res></div>
+        <img class="preview" data-prev alt="Testbeeld">
+        <div class="btns"><button data-test>Test</button></div>`;
+      const sel = el.querySelector('[data-f="brand"]');
+      const sync = () => {
+        const b = brands[sel.value];
+        el.querySelector("[data-std]").hidden = b.custom;
+        el.querySelector("[data-custom]").hidden = !b.custom;
+        el.querySelector('[data-f="port"]').placeholder = b.port;
+      };
+      sel.addEventListener("change", sync); sync();
+      el.querySelector("[data-plates]").hidden = !$("fPlates").checked;
+      $("cams").appendChild(el);
+      el.querySelector('[data-f="friendly_name"]').focus();
+    }
+    function camData(el) {
+      const d = {};
+      el.querySelectorAll("[data-f]").forEach((f) => { d[f.dataset.f] = f.type === "checkbox" ? f.checked : f.value.trim(); });
+      if (!brands[d.brand].custom) { delete d.main_url; delete d.sub_url; }
+      d.port = d.port ? Number(d.port) : undefined;
+      return d;
+    }
+
+    $("codeGo").onclick = async () => {
+      code = $("code").value.trim().toUpperCase();
+      try {
+        await call("/api/setup/check");
+        const info = await fetch("/api/setup/info").then((r) => r.json());
+        brands = info.brands;
+        $("pubUrl").value = info.public_url;
+        $("codeCard").hidden = true; $("wizard").hidden = false;
+        camCard();
+      } catch (e) { show($("codeRes"), false, e.message); }
+    };
+    $("code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("codeGo").click(); });
+    $("addCam").onclick = camCard;
+    $("fPlates").onchange = () => document.querySelectorAll("[data-plates]").forEach((x) => { x.hidden = !$("fPlates").checked; });
+    $("fLive").onchange = () => { $("goRow").hidden = !$("fLive").checked; };
+
+    $("cams").addEventListener("click", async (ev) => {
+      const el = ev.target.closest(".cam");
+      if (ev.target.closest("[data-remove]")) { el.remove(); return; }
+      const btn = ev.target.closest("[data-test]");
+      if (!btn) return;
+      const res = el.querySelector("[data-res]"), prev = el.querySelector("[data-prev]");
+      btn.disabled = true; btn.textContent = "Bezig…"; prev.style.display = "none";
+      try {
+        const r = await call("/api/setup/test-camera", camData(el));
+        if (r.ok) {
+          const sub = r.sub ? (r.sub.ok ? ` · lage kwaliteit ${r.sub.width}×${r.sub.height}` : " · lage kwaliteit werkt niet, dan wordt de hoge gebruikt") : "";
+          show(res, true, `Werkt: ${r.width}×${r.height} (${r.codec})${sub}`);
+          prev.src = r.preview; prev.style.display = "block";
+        } else show(res, false, r.error);
+      } catch (e) { show(res, false, e.message); }
+      btn.disabled = false; btn.textContent = "Test";
+    });
+
+    $("mqttTest").onclick = async () => {
+      try {
+        const r = await call("/api/setup/test-mqtt", { host: $("mqttHost").value.trim(), port: Number($("mqttPort").value), username: $("mqttUser").value, password: $("mqttPass").value });
+        show($("mqttRes"), r.ok, r.ok ? "Verbonden met de MQTT-server" : `Mislukt: ${r.error}`);
+      } catch (e) { show($("mqttRes"), false, e.message); }
+    };
+
+    $("save").onclick = async () => {
+      const cams = [...document.querySelectorAll(".cam")].map(camData);
+      const body = {
+        cameras: cams,
+        mqtt: { host: $("mqttHost").value.trim(), port: Number($("mqttPort").value), username: $("mqttUser").value, password: $("mqttPass").value },
+        features: { faces: $("fFaces").checked, plates: $("fPlates").checked, live: $("fLive").checked },
+        go2rtc_url: $("goUrl").value.trim(),
+        storage: { days: Number($("days").value), person_days: Number($("pdays").value), max_gb: Number($("maxgb").value) },
+        public_url: $("pubUrl").value.trim(), domain: $("domain").value.trim(),
+      };
+      $("save").disabled = true;
+      try {
+        const r = await call("/api/setup/save", body);
+        show($("saveRes"), true, r.auth
+          ? `Opgeslagen. De service start opnieuw. Open daarna ${r.public_url} en koppel je passkey met de code uit het log.`
+          : "Opgeslagen. De service start opnieuw; deze pagina gaat zo vanzelf verder…");
+        if (!r.auth) {
+          const wait = async () => {
+            try { const s = await fetch("/api/status", { cache: "no-store" }); if (s.ok) { location.href = "/"; return; } } catch {}
+            setTimeout(wait, 2000);
+          };
+          setTimeout(wait, 4000);
+        }
+      } catch (e) { show($("saveRes"), false, e.message); $("save").disabled = false; }
+    };
+  </script>
+</body>
+</html>

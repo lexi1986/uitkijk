@@ -1,0 +1,1343 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#090e18">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Camera's">
+  <title>Camera's</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* Midnight Electric v1.0. Alle kleuren via deze tokens. */
+    :root {
+      color-scheme: dark;
+      /* oppervlakken */
+      --me-bg: #090e18;
+      --me-surface: #131c2b;
+      --me-elevated: #1d2a3d;
+      --me-surface-hover: #223149;
+      --me-border: #2b3a50;
+      --me-border-strong: #39516c;
+      /* tekst */
+      --me-text: #f3f7fc;
+      --me-text-secondary: #94a4ba;
+      --me-text-muted: #71829b;
+      /* accenten en statussen */
+      --me-primary: #39d8f4;
+      --me-violet: #9c84ff;
+      --me-success: #48e0b4;
+      --me-warning: #ffbe5c;
+      --me-danger: #fb7185;
+      /* afgeleide tinten (centraal, geen losse waarden in de code) */
+      --me-primary-tint: rgba(57, 216, 244, 0.07);
+      --me-primary-soft: rgba(57, 216, 244, 0.13);
+      --me-primary-border: rgba(57, 216, 244, 0.45);
+      --me-violet-soft: rgba(156, 132, 255, 0.15);
+      --me-success-soft: rgba(72, 224, 180, 0.13);
+      --me-warning-soft: rgba(255, 190, 92, 0.14);
+      --me-danger-soft: rgba(251, 113, 133, 0.14);
+      --me-danger-fill: rgba(251, 113, 133, 0.35);
+      --me-danger-border: rgba(251, 113, 133, 0.32);
+      --me-neutral-soft: rgba(148, 164, 186, 0.14);
+      --me-scrim: rgba(9, 14, 24, 0.85);
+      --me-scrim-soft: rgba(9, 14, 24, 0.7);
+      --me-backdrop: rgba(5, 8, 14, 0.82);
+      --me-glow-subtle: 0 0 0 1px rgba(57, 216, 244, 0.10), 0 0 18px rgba(57, 216, 244, 0.075);
+      --me-shadow-card: 0 6px 22px rgba(0, 0, 0, 0.12);
+      /* vorm en beweging */
+      --me-radius-sm: 8px;
+      --me-radius-md: 12px;
+      --me-radius-card: 16px;
+      --me-radius-lg: 20px;
+      --me-radius-pill: 999px;
+      --me-transition-fast: 140ms ease;
+      --me-transition-normal: 200ms ease;
+      /* fysieke Nederlandse kentekenplaat (afbeelding van een echt object, geen UI-kleur) */
+      --nl-plate-bg: #f7c820;
+      --nl-plate-text: #111111;
+      --nl-plate-band: #003399;
+      --me-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; background: var(--me-bg); color: var(--me-text); font-family: var(--me-font); -webkit-font-smoothing: antialiased; }
+    button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+    h1, h2, h3 { margin: 0; font-family: var(--me-font); font-weight: 600; letter-spacing: -.02em; }
+    h1 { font-weight: 700; }
+    /* toetsenbordfocus: altijd duidelijk zichtbaar */
+    :is(button, a, select, input, [role="button"]):focus-visible { outline: 2px solid var(--me-primary); outline-offset: 3px; }
+    .muted { color: var(--me-text-secondary); }
+    .eyebrow { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--me-text-secondary); font-weight: 500; }
+
+    .wrap { max-width: 1440px; margin: 0 auto; padding: 1.25rem 16px 3rem; padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+    header { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+    header h1 { font-size: 1.875rem; }
+    .stats { display: flex; gap: .5rem; flex-wrap: wrap; }
+    .pill { display: inline-flex; align-items: center; gap: .4rem; font-size: .78rem; font-weight: 500; padding: .35rem .7rem; border-radius: var(--me-radius-pill); font-variant-numeric: tabular-nums; background: var(--me-surface); border: 1px solid var(--me-border); color: var(--me-text-secondary); white-space: nowrap; }
+    .pill b { color: var(--me-text); font-weight: 600; }
+
+    /* camera-tegels */
+    .cams { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: .9rem; margin-bottom: 1.5rem; }
+    .cam { position: relative; text-align: left; background: var(--me-surface); border: 1px solid var(--me-border); border-radius: var(--me-radius-card); box-shadow: var(--me-shadow-card); overflow: hidden; transition: background var(--me-transition-fast), border-color var(--me-transition-fast), box-shadow var(--me-transition-normal); }
+    .cam:hover { background: var(--me-surface-hover); border-color: var(--me-border-strong); }
+    .cam.active { border-color: var(--me-primary-border); box-shadow: var(--me-glow-subtle); }
+    .cam .img { aspect-ratio: 16 / 9; background: var(--me-bg) center / cover no-repeat; position: relative; }
+    .cam .img::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, var(--me-scrim)); }
+    .cam .meta { position: absolute; left: .9rem; right: .9rem; bottom: .75rem; display: flex; justify-content: space-between; align-items: center; gap: .5rem; z-index: 1; }
+    .cam h3 { font-size: 1.05rem; }
+    .dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--me-text-muted); display: inline-block; flex-shrink: 0; }
+    .dot.on { background: var(--me-success); }
+    .dot.off { background: var(--me-danger); }
+    .name { display: flex; align-items: center; gap: .5rem; }
+    .badge { display: inline-flex; align-items: center; gap: .35rem; font-size: .7rem; font-weight: 600; padding: .2rem .55rem; border-radius: var(--me-radius-pill); background: var(--me-elevated); color: var(--me-text-secondary); white-space: nowrap; }
+    .badge.rec { background: var(--me-warning-soft); color: var(--me-warning); }
+    .badge.rec::before { content: ""; width: .4rem; height: .4rem; border-radius: 50%; background: var(--me-warning); animation: pulse 1.2s ease-in-out infinite; }
+    .badge.motion { background: var(--me-primary-soft); color: var(--me-primary); }
+    .badge.offline { background: var(--me-danger-soft); color: var(--me-danger); }
+    @keyframes pulse { 50% { opacity: .25; } }
+
+    /* filters */
+    .filters { display: flex; justify-content: space-between; gap: .75rem 1rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
+    .chips { display: flex; gap: .4rem; flex-wrap: wrap; }
+    .chip { display: inline-flex; align-items: center; gap: .45rem; min-height: 2.25rem; font-size: .82rem; font-weight: 500; padding: .45rem .85rem; border-radius: var(--me-radius-pill); background: var(--me-surface); border: 1px solid var(--me-border); color: var(--me-text-secondary); transition: background var(--me-transition-fast), border-color var(--me-transition-fast), box-shadow var(--me-transition-normal); }
+    .chip:hover { color: var(--me-text); background: var(--me-surface-hover); }
+    .chip[aria-pressed="true"] { background: var(--me-primary-tint); border-color: var(--me-primary-border); color: var(--me-text); box-shadow: var(--me-glow-subtle); }
+    .chip .sw { width: .5rem; height: .5rem; border-radius: 50%; }
+
+    /* zoeken */
+    .search { position: relative; flex: 1 1 260px; max-width: 420px; }
+    .search input { width: 100%; min-height: 2.75rem; font: inherit; font-size: 16px; padding: .5rem .9rem .5rem 2.3rem; border-radius: var(--me-radius-pill); background: var(--me-surface); color: var(--me-text); border: 1px solid var(--me-border); transition: border-color var(--me-transition-fast), box-shadow var(--me-transition-normal); }
+    .search input::placeholder { color: var(--me-text-secondary); }
+    .search input:focus { outline: none; border-color: var(--me-primary-border); box-shadow: var(--me-glow-subtle); }
+    .search svg { position: absolute; left: .85rem; top: 50%; transform: translateY(-50%); color: var(--me-text-secondary); pointer-events: none; }
+
+    /* dagoverzicht */
+    .daypick { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
+    .daypick input[type=date] { min-height: 2.25rem; font: inherit; font-size: .82rem; padding: .3rem .7rem; border-radius: var(--me-radius-pill); background: var(--me-surface); color: var(--me-text); border: 1px solid var(--me-border); color-scheme: dark; }
+    .daypick input[type=date].on { border-color: var(--me-primary-border); box-shadow: var(--me-glow-subtle); }
+    .summary { background: var(--me-surface); border: 1px solid var(--me-border); border-radius: var(--me-radius-card); box-shadow: var(--me-shadow-card); padding: 1rem 1.1rem; margin-bottom: 1.25rem; display: grid; gap: .9rem; }
+    .summary:empty { display: none; }
+    .summary .txt { color: var(--me-text-secondary); font-size: .88rem; line-height: 1.45; }
+    .sum-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: .6rem; }
+    .stat { background: var(--me-elevated); border: 1px solid var(--me-border); border-radius: var(--me-radius-md); padding: .6rem .75rem; }
+    .stat b { display: block; font-size: 1.45rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--me-text); }
+    .stat span { font-size: .74rem; color: var(--me-text-secondary); }
+    .who-row { display: flex; flex-wrap: wrap; gap: .4rem; }
+
+    /* tijdlijn */
+    .day { margin: 1.5rem 0 .75rem; display: flex; align-items: baseline; gap: .75rem; }
+    .day h2 { font-size: 1.15rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: .75rem; }
+    .ev { text-align: left; background: var(--me-surface); border: 1px solid var(--me-border); border-radius: var(--me-radius-card); box-shadow: var(--me-shadow-card); overflow: hidden; transition: background var(--me-transition-fast), border-color var(--me-transition-fast), box-shadow var(--me-transition-normal); }
+    .ev:hover { background: var(--me-surface-hover); border-color: var(--me-border-strong); }
+    .ev .thumb { aspect-ratio: 16 / 10; background: var(--me-bg) center / cover no-repeat; position: relative; }
+    .ev .thumb .badge { position: absolute; top: .55rem; left: .55rem; backdrop-filter: blur(6px); }
+    .ev .thumb video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: transparent; }
+    .ev .thumb .dur { position: absolute; right: .55rem; bottom: .5rem; font-size: .72rem; font-weight: 600; padding: .15rem .45rem; border-radius: .4rem; background: var(--me-scrim); }
+    .ev .body { padding: .6rem .75rem .7rem; display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; }
+    .ev .time { font-family: var(--me-font); font-size: 1.15rem; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+    .ev .sub { font-size: .76rem; color: var(--me-text-secondary); text-align: right; }
+    .l-persoon { background: var(--me-primary-soft) !important; color: var(--me-primary) !important; }
+    .l-voertuig { background: var(--me-violet-soft) !important; color: var(--me-violet) !important; }
+    .l-dier { background: var(--me-success-soft) !important; color: var(--me-success) !important; }
+    .l-beweging { background: var(--me-neutral-soft) !important; color: var(--me-text-secondary) !important; }
+    .l-aanbellen { background: var(--me-warning-soft) !important; color: var(--me-warning) !important; }
+
+    .more { display: block; margin: 1.5rem auto 0; min-height: 2.75rem; padding: .7rem 1.4rem; border-radius: var(--me-radius-md); background: var(--me-elevated); border: 1px solid var(--me-border); color: var(--me-text); font-weight: 500; transition: background var(--me-transition-fast), border-color var(--me-transition-fast), box-shadow var(--me-transition-normal); }
+    .more:hover { background: var(--me-surface-hover); }
+    .empty { text-align: center; padding: 4rem 1rem; color: var(--me-text-secondary); border: 1px dashed var(--me-border-strong); border-radius: var(--me-radius-card); }
+    .empty h3 { color: var(--me-text); margin-bottom: .35rem; }
+    .banner { display: none; margin-bottom: 1rem; padding: .7rem 1rem; border-radius: var(--me-radius-md); background: var(--me-danger-soft); border: 1px solid var(--me-danger-border); color: var(--me-danger); font-size: .88rem; }
+    .banner.show { display: block; }
+
+    /* speler */
+    dialog { padding: 0; border: 1px solid var(--me-border); border-radius: var(--me-radius-lg); background: var(--me-surface); color: var(--me-text); width: min(1200px, 100vw - 32px); max-height: calc(100dvh - 32px); overflow: hidden; }
+    dialog::backdrop { background: var(--me-backdrop); backdrop-filter: blur(4px); }
+    .player-head { display: flex; justify-content: space-between; align-items: center; gap: .75rem; padding: .8rem 1rem; border-bottom: 1px solid var(--me-border); }
+    .player-head h3 { font-size: 1.05rem; display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+    .player-head .muted { font-size: .82rem; }
+    video { display: block; width: 100%; max-height: calc(100dvh - 160px); background: var(--me-bg); }
+    dialog { overflow: auto; }
+    dialog:has(.faces:not(:empty)) video { max-height: calc(100dvh - 300px); }
+    dialog:has(#pFaces:not(:empty)):has(#pPlates:not(:empty)) video { max-height: calc(100dvh - 400px); }
+    dialog:has(#pAi:not(:empty)) video { max-height: calc(100dvh - 330px); }
+    /* AI-beschrijving */
+    .ai-box { padding: .8rem 1rem; border-top: 1px solid var(--me-border); display: grid; gap: .45rem; }
+    .ai-box:empty { display: none; }
+    .ai-head { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+    .ai-head .eyebrow { margin-right: .25rem; }
+    .ai-text { font-size: .95rem; line-height: 1.5; color: var(--me-text); }
+    .ai-tags { display: flex; gap: .35rem; flex-wrap: wrap; }
+    .ai-note { font-size: .8rem; color: var(--me-text-secondary); line-height: 1.45; }
+    .ai-note li { margin-left: 1rem; }
+    .ai-note ul { margin: 0; padding: 0; }
+    .badge.ok { background: var(--me-success-soft); color: var(--me-success); }
+    .badge.warn { background: var(--me-warning-soft); color: var(--me-warning); }
+    .player-foot { display: flex; justify-content: space-between; align-items: center; gap: .75rem; padding: .7rem 1rem; border-top: 1px solid var(--me-border); flex-wrap: wrap; }
+    .btns { display: flex; gap: .4rem; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; min-height: 2.5rem; font-size: .85rem; font-weight: 500; padding: .45rem .9rem; border-radius: var(--me-radius-md); background: var(--me-elevated); border: 1px solid var(--me-border); text-decoration: none; color: var(--me-text); transition: background var(--me-transition-fast), border-color var(--me-transition-fast), box-shadow var(--me-transition-normal); }
+    .btn:hover:not(:disabled) { background: var(--me-surface-hover); }
+    .btn:disabled { opacity: .35; cursor: default; }
+    .icon-btn { width: 2.5rem; height: 2.5rem; display: grid; place-items: center; border-radius: var(--me-radius-md); border: 1px solid var(--me-border); background: var(--me-elevated); color: var(--me-text-secondary); transition: background var(--me-transition-fast), border-color var(--me-transition-fast), box-shadow var(--me-transition-normal); }
+    .icon-btn:hover { background: var(--me-surface-hover); color: var(--me-text); }
+    svg { width: 1rem; height: 1rem; }
+
+    /* gezichten */
+    .pill.link { cursor: pointer; color: var(--me-text); }
+    .pill.link { transition: background var(--me-transition-fast); }
+    .pill.link:hover { background: var(--me-surface-hover); }
+    .faces { display: flex; gap: .6rem; flex-wrap: wrap; padding: .7rem 1rem; border-top: 1px solid var(--me-border); align-items: flex-start; }
+    .faces:empty { display: none; }
+    .face { display: flex; flex-direction: column; align-items: center; gap: .35rem; width: 6.2rem; }
+    .face img { width: 4.5rem; height: 4.5rem; border-radius: 50%; object-fit: cover; border: 2px solid var(--me-border-strong); background: var(--me-bg); }
+    .face.known img { border-color: var(--me-primary); }
+    .face .nm { font-size: .78rem; font-weight: 600; text-align: center; }
+    .face.known .nm { color: var(--me-primary); }
+    .face select { width: 100%; font: inherit; font-size: .72rem; padding: .25rem .3rem; border-radius: var(--me-radius-sm); background: var(--me-elevated); color: var(--me-text); border: 1px solid var(--me-border); }
+    :is(select, input[type=number]):focus { border-color: var(--me-primary); }
+    .names { color: var(--me-primary); font-weight: 600; }
+    .plate-txt { display: inline-block; font-family: var(--me-font); font-weight: 700; letter-spacing: .04em; color: var(--nl-plate-text); background: var(--nl-plate-bg); border-radius: .3rem; padding: .05rem .4rem; border-left: .45rem solid var(--nl-plate-band); font-size: .78rem; }
+    .plate { display: flex; flex-direction: column; align-items: center; gap: .35rem; min-width: 7.5rem; }
+    .plate img { height: 2.6rem; max-width: 9rem; border-radius: .35rem; border: 1px solid var(--me-border-strong); background: var(--me-bg); object-fit: contain; }
+    .plate .nm { font-size: .78rem; font-weight: 600; color: var(--me-violet); }
+    .plate .btn { font-size: .72rem; padding: .25rem .6rem; }
+    [hidden] { display: none !important; }
+    #beheerBody, #cmpBody { padding: 1rem; max-height: calc(100dvh - 140px); overflow: auto; }
+    .people { padding: 1rem; display: grid; gap: 1rem; max-height: calc(100dvh - 140px); overflow: auto; }
+    .person h3 { font-size: 1rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: .55rem; }
+    .samples { display: flex; flex-wrap: wrap; gap: .5rem; }
+    .sample { position: relative; }
+    .sample img { width: 4rem; height: 4rem; border-radius: .7rem; object-fit: cover; display: block; border: 1px solid var(--me-border-strong); }
+    .sample button { position: absolute; top: -.35rem; right: -.35rem; width: 1.3rem; height: 1.3rem; border-radius: 50%; background: var(--me-elevated); border: 1px solid var(--me-border-strong); font-size: .7rem; line-height: 1; color: var(--me-text-secondary); }
+    .sample button:hover { color: var(--me-danger); border-color: var(--me-danger); }
+    .sample.auto img { border-style: dashed; }
+    .sample.auto::after { content: "auto"; position: absolute; left: .25rem; bottom: .25rem; font-size: .6rem; font-weight: 600; padding: 0 .3rem; border-radius: .3rem; background: var(--me-bg); color: var(--me-text-secondary); }
+    .people h4 { font-size: .74rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--me-text-secondary); margin: .2rem 0 .1rem; }
+    .unknowns { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); }
+    .ugroup { display: grid; gap: .6rem; align-content: start; padding: .8rem; background: var(--me-elevated); border: 1px solid var(--me-border); border-radius: var(--me-radius-card); }
+    .ugroup .samples { gap: .35rem; }
+    .ugroup .samples img { width: 3.1rem; height: 3.1rem; border-radius: .6rem; display: block; border: 1px solid var(--me-border-strong); object-fit: cover; }
+    .ugroup .meta { font-size: .76rem; color: var(--me-text-secondary); }
+    .ugroup .meta b { color: var(--me-text); font-weight: 600; }
+    .ugroup .hint { color: var(--me-violet); font-weight: 600; }
+    .ugroup .row { display: flex; flex-wrap: wrap; gap: .4rem; }
+    .ugroup select { flex: 1 1 8rem; min-width: 0; font: inherit; font-size: .8rem; padding: .35rem .45rem; border-radius: var(--me-radius-sm); background: var(--me-surface); color: var(--me-text); border: 1px solid var(--me-border); }
+    .ugroup .btn { min-height: 2.1rem; font-size: .78rem; padding: .3rem .7rem; }
+    .link-red { font-size: .75rem; color: var(--me-text-secondary); font-weight: 500; font-family: var(--me-font); }
+    .link-red:hover { color: var(--me-danger); }
+
+    /* masker */
+    .tile-btns { position: absolute; top: .6rem; right: .6rem; z-index: 2; display: flex; gap: .35rem; }
+    .tile-btn { width: 2rem; height: 2rem; display: grid; place-items: center; border-radius: 50%; background: var(--me-scrim-soft); border: 1px solid var(--me-border-strong); color: var(--me-text); backdrop-filter: blur(6px); }
+    .tile-btn:hover { border-color: var(--me-primary); color: var(--me-primary); }
+    .tile-btn.live { background: var(--me-primary); border-color: var(--me-primary); color: var(--me-bg); }
+    .tile-btn.live:hover { color: var(--me-bg); border-color: var(--me-text); }
+    .badges { display: flex; gap: .3rem; flex-wrap: wrap; justify-content: flex-end; }
+    .badge.loiter { background: var(--me-danger-soft); color: var(--me-danger); }
+    .ev.vals .thumb { opacity: .55; }
+    .ev .thumb .badge.vals { left: auto; right: .55rem; top: .55rem; }
+    .cmp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: .6rem; margin-bottom: 1rem; }
+    .cmp-row { display: grid; grid-template-columns: 6.5rem 1fr; gap: .75rem; padding: .7rem 0; border-top: 1px solid var(--me-border); }
+    .cmp-row img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: .5rem; background: var(--me-bg); }
+    .cmp-row .txt { font-size: .82rem; color: var(--me-text-secondary); display: grid; gap: .25rem; }
+    .cmp-row .txt b { color: var(--me-text); font-weight: 600; }
+    .badge.who { background: var(--me-primary-soft); color: var(--me-primary); }
+    .live-frame { display: block; width: 100%; aspect-ratio: 16 / 9; max-height: calc(100dvh - 120px); border: 0; background: var(--me-bg); }
+    .form { padding: 1rem; display: grid; gap: 1.1rem; max-height: calc(100dvh - 160px); overflow: auto; }
+    .form h4 { margin: 0 0 .5rem; font-family: var(--me-font); font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; color: var(--me-text-secondary); font-weight: 500; }
+    .field { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .5rem 0; border-bottom: 1px solid var(--me-border); font-size: .9rem; }
+    .field:last-child { border-bottom: 0; }
+    .field input[type=number] { width: 6.5rem; min-height: 2.5rem; font: inherit; font-variant-numeric: tabular-nums; padding: .35rem .6rem; border-radius: var(--me-radius-md); background: var(--me-elevated); color: var(--me-text); border: 1px solid var(--me-border); text-align: right; }
+    .field .unit { color: var(--me-text-secondary); font-size: .8rem; margin-left: .3rem; }
+    .switch { position: relative; width: 2.6rem; height: 1.5rem; flex-shrink: 0; }
+    .switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+    .switch span { position: absolute; inset: 0; border-radius: var(--me-radius-pill); background: var(--me-border-strong); transition: background var(--me-transition-fast), box-shadow var(--me-transition-normal); pointer-events: none; }
+    .switch span::after { content: ""; position: absolute; top: .2rem; left: .2rem; width: 1.1rem; height: 1.1rem; border-radius: 50%; background: var(--me-text); transition: transform var(--me-transition-normal); }
+    .switch input:checked + span { background: var(--me-primary); box-shadow: var(--me-glow-subtle); }
+    .switch input:focus-visible + span { outline: 2px solid var(--me-primary); outline-offset: 3px; }
+    .switch input:checked + span::after { transform: translateX(1.1rem); background: var(--me-bg); }
+    .mask-stage { position: relative; background: var(--me-bg); user-select: none; -webkit-user-select: none; touch-action: manipulation; cursor: crosshair; }
+    .mask-stage img { display: block; width: 100%; max-height: calc(100dvh - 230px); object-fit: contain; }
+    .mask-stage svg { position: absolute; pointer-events: none; overflow: visible; }
+    .mask-stage .pt { position: absolute; width: .7rem; height: .7rem; margin: -.35rem 0 0 -.35rem; border-radius: 50%; background: var(--me-primary); border: 2px solid var(--me-bg); pointer-events: none; }
+    .mask-stage .pt.first { width: 1.1rem; height: 1.1rem; margin: -.55rem 0 0 -.55rem; background: var(--me-bg); border: 3px solid var(--me-primary); pointer-events: auto; cursor: pointer; }
+    .mask-stage .del { position: absolute; transform: translate(-50%, -50%); width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--me-scrim); border: 1px solid var(--me-danger); color: var(--me-danger); font-size: .8rem; line-height: 1; pointer-events: auto; cursor: pointer; }
+    .mask-hint { font-size: .8rem; color: var(--me-text-secondary); }
+    .m-poly { fill: var(--me-danger-fill); stroke: var(--me-danger); stroke-width: 2; }
+    .zones .m-poly { fill: var(--me-violet-soft); stroke: var(--me-violet); }
+    .mask-stage .zname { position: absolute; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .25rem .2rem .55rem; border-radius: var(--me-radius-pill); background: var(--me-scrim); border: 1px solid var(--me-violet); color: var(--me-text); font-size: .75rem; font-weight: 600; white-space: nowrap; pointer-events: auto; }
+    .mask-stage .zname .del { position: static; transform: none; width: 1.3rem; height: 1.3rem; font-size: .7rem; }
+    .seg { display: inline-flex; padding: .2rem; gap: .2rem; border-radius: var(--me-radius-pill); background: var(--me-elevated); border: 1px solid var(--me-border); margin-top: .5rem; }
+    .seg button { font: inherit; font-size: .8rem; font-weight: 500; padding: .3rem .85rem; border-radius: var(--me-radius-pill); color: var(--me-text-secondary); background: none; border: 0; }
+    .seg button[aria-selected=true] { background: var(--me-primary); color: var(--me-bg); font-weight: 600; }
+    .m-draft { fill: var(--me-primary-soft); stroke: var(--me-primary); stroke-width: 2; stroke-dasharray: 6 4; }
+    .btn.primary { background: var(--me-primary); border-color: var(--me-primary); color: var(--me-bg); font-weight: 600; }
+    .btn.primary:hover:not(:disabled) { background: var(--me-primary); box-shadow: var(--me-glow-subtle); }
+
+    .filter-toggle { display: none; }
+    .filter-toggle b { color: var(--me-primary); }
+    .beheer-list { display: grid; gap: .5rem; margin-bottom: 1rem; }
+    .beheer-row { display: flex; justify-content: space-between; align-items: center; gap: .75rem; padding: .55rem 0; border-bottom: 1px solid var(--me-border); font-size: .9rem; }
+    .beheer-row span { color: var(--me-text-secondary); }
+    .beheer-row .btns { display: flex; gap: .4rem; flex-wrap: wrap; justify-content: flex-end; }
+    .chip.important[aria-pressed=true] { border-color: var(--me-primary-border); color: var(--me-text); }
+    /* aanraakschermen: alles minstens 44px (Apple HIG) */
+    @media (pointer: coarse) {
+      .chip, .btn, .pill.link, .daypick input[type=date] { min-height: 44px; }
+      .tile-btn, .icon-btn { width: 44px; height: 44px; }
+      .plate .btn, .ugroup .btn { min-height: 44px; font-size: .85rem; }
+      .badge { font-size: .76rem; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition: none !important; animation: none !important; }
+    }
+
+    @media (max-width: 560px) {
+      header h1 { font-size: 1.55rem; }
+      /* camera's als veegbare rij, zodat de tijdlijn direct in beeld is */
+      .cams { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 72%; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -16px 1.25rem; padding: 0 16px; scrollbar-width: none; }
+      .cams::-webkit-scrollbar { display: none; }
+      .cam { scroll-snap-align: start; }
+      .cam h3 { font-size: .95rem; }
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; }
+      .ev .body { flex-direction: column; align-items: flex-start; gap: .1rem; }
+      .ev .sub { text-align: left; }
+      dialog { width: 100vw; max-width: 100vw; max-height: 100dvh; height: 100dvh; border-radius: 0; border: 0; }
+      .player-head h3 { font-size: .95rem; }
+      /* filters inklappen achter één knop, zodat de opnames direct in beeld zijn */
+      .filter-toggle { display: inline-flex; }
+      .filters:not(.open) .chips { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <div class="eyebrow">Thuis</div>
+        <h1>Camera's</h1>
+      </div>
+      <div class="stats" id="stats"></div>
+    </header>
+
+    <div class="banner" id="banner">De service is niet bereikbaar. Opnieuw proberen…</div>
+
+    <section class="cams" id="cams" aria-label="Camera's"></section>
+
+    <div class="filters">
+      <label class="search" aria-label="Zoeken in opnames">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="Zoek: pakket, Sam, GKB-31-R, witte bus…" autocomplete="off" enterkeyhint="search">
+      </label>
+      <div class="chips" id="camChips" role="group" aria-label="Camera"></div>
+      <div class="chips" id="labelChips" role="group" aria-label="Soort"></div>
+      <div class="chips" id="personChips" role="group" aria-label="Persoon"></div>
+      <div class="daypick" role="group" aria-label="Dag">
+        <button class="chip filter-toggle" id="filterToggle" aria-expanded="false">Filter</button>
+        <button class="chip important" id="importantChip" aria-pressed="true" title="Verbergt 'waarschijnlijk niets' en de eigen auto die komt of gaat">Alleen belangrijk</button>
+        <button class="chip" data-day="0" aria-pressed="false">Vandaag</button>
+        <button class="chip" data-day="1" aria-pressed="false">Gisteren</button>
+        <input type="date" id="dayInput" aria-label="Kies een dag">
+      </div>
+    </div>
+
+    <section class="summary" id="summary" aria-live="polite"></section>
+
+    <main id="timeline" aria-live="polite"></main>
+    <button class="more" id="more" hidden>Meer laden</button>
+  </div>
+
+  <dialog id="player" aria-labelledby="pTitle">
+    <div class="player-head">
+      <div>
+        <h3 id="pTitle"></h3>
+        <div class="muted" id="pSub"></div>
+      </div>
+      <button class="icon-btn" id="pClose" aria-label="Sluiten">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <video id="pVideo" controls playsinline preload="metadata"></video>
+    <div class="faces" id="pFaces"></div>
+    <div class="faces" id="pPlates"></div>
+    <div class="ai-box" id="pAi" aria-live="polite"></div>
+    <div class="player-foot">
+      <div class="btns">
+        <button class="btn" id="pPrev" title="Nieuwer (←)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>Nieuwer
+        </button>
+        <button class="btn" id="pNext" title="Ouder (→)">Ouder
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+      <button class="btn" id="pFalse" title="Niets aan de hand: deze plek voortaan negeren voor dit soort object">Niets aan de hand</button>
+      <a class="btn" id="pDownload" download>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg>Downloaden
+      </a>
+    </div>
+  </dialog>
+
+  <dialog id="peopleDlg" aria-labelledby="peopleTitle">
+    <div class="player-head">
+      <div>
+        <h3 id="peopleTitle">Gezichten</h3>
+        <div class="muted">Geef onbekende gezichten hieronder een naam, of kies een naam bij het gezicht in een event. Zeker herkende gezichten leert de server daarna zelf bij (gestippeld, "auto").</div>
+      </div>
+      <button class="icon-btn" data-close aria-label="Sluiten">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="people" id="people"></div>
+  </dialog>
+
+  <dialog id="keysDlg" aria-labelledby="keysTitle">
+    <div class="player-head">
+      <div><h3 id="keysTitle">Passkeys</h3><div class="muted">Apparaten die mogen inloggen. Met iCloud-sleutelhanger deelt je iPhone de passkey van je MacBook.</div></div>
+      <button class="icon-btn" data-dlg-close="keysDlg" aria-label="Sluiten">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="people" id="keysList"></div>
+    <div class="player-foot">
+      <button class="btn" id="keysLogoutAll">Overal uitloggen</button>
+      <div class="btns">
+        <button class="btn" id="keysLogout">Uitloggen</button>
+        <button class="btn primary" id="keysAdd">Passkey voor dit apparaat</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="platesDlg" aria-labelledby="platesTitle">
+    <div class="player-head">
+      <div><h3 id="platesTitle">Kentekens</h3><div class="muted">Geef een kenteken een naam via een event met een auto. Bekende auto's gaan alleen naar het logboek.</div></div>
+      <button class="icon-btn" data-dlg-close="platesDlg" aria-label="Sluiten">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="people" id="platesList"></div>
+  </dialog>
+
+  <dialog id="liveDlg" aria-labelledby="liveTitle">
+    <div class="player-head">
+      <div><h3 id="liveTitle">Live</h3><div class="muted">Via go2rtc, rechtstreeks van de camera.</div></div>
+      <button class="icon-btn" data-dlg-close="liveDlg" aria-label="Sluiten">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <iframe class="live-frame" id="liveFrame" title="Live camerabeeld" allow="autoplay; fullscreen"></iframe>
+  </dialog>
+
+  <dialog id="beheerDlg" aria-labelledby="beheerTitle">
+    <div class="player-head">
+      <div><h3 id="beheerTitle">Beheer</h3><div class="muted">Instellingen, maskers en de server. Voor dagelijks gebruik heb je dit niet nodig.</div></div>
+      <button class="icon-btn" data-dlg-close="beheerDlg" aria-label="Sluiten">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div id="beheerBody"></div>
+  </dialog>
+
+  <dialog id="cmpDlg" aria-labelledby="cmpTitle">
+    <div class="player-head">
+      <div><h3 id="cmpTitle">AI-vergelijking</h3><div class="muted">Externe AI in Home Assistant (die nu de meldingen bepaalt) naast de lokale AI op je eigen server, over de laatste 7 dagen.</div></div>
+      <button class="icon-btn" data-dlg-close="cmpDlg" aria-label="Sluiten">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div id="cmpBody"></div>
+  </dialog>
+
+  <dialog id="setDlg" aria-labelledby="setTitle">
+    <div class="player-head">
+      <div><h3 id="setTitle">Instellingen</h3><div class="muted">Wijzigingen werken meteen en blijven bewaard.</div></div>
+      <button class="icon-btn" data-dlg-close="setDlg" aria-label="Sluiten">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="form" id="setForm"></div>
+    <div class="player-foot">
+      <span class="mask-hint">Gevoeliger = kleiner percentage en lagere zekerheid.</span>
+      <div class="btns"><button class="btn primary" id="setSave">Opslaan</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="maskDlg" aria-labelledby="maskTitle">
+    <div class="player-head">
+      <div>
+        <h3 id="maskTitle">Masker</h3>
+        <div class="muted" id="mDesc"></div>
+        <div class="seg" role="tablist" aria-label="Wat teken je?">
+          <button role="tab" data-mmode="mask" aria-selected="true">Masker</button>
+          <button role="tab" data-mmode="zones" aria-selected="false">Zones</button>
+        </div>
+      </div>
+      <button class="icon-btn" data-mask-close aria-label="Sluiten">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="mask-stage" id="mStage">
+      <img id="mImg" alt="Actueel camerabeeld">
+      <svg id="mSvg" preserveAspectRatio="none" viewBox="0 0 100 100"></svg>
+      <div id="mDots"></div>
+    </div>
+    <div class="player-foot">
+      <span class="mask-hint" id="mHint">Klik punten om een vlak te tekenen. Klik op het eerste punt om het te sluiten.</span>
+      <div class="btns">
+        <button class="btn" id="mUndo">Punt terug</button>
+        <button class="btn" id="mClear">Alles wissen</button>
+        <button class="btn primary" id="mSave">Opslaan</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script>
+    const LABELS = {
+      aanbellen: { name: "Aanbellen", color: "var(--me-warning)" },
+      persoon: { name: "Persoon", color: "var(--me-primary)" },
+      voertuig: { name: "Voertuig", color: "var(--me-violet)" },
+      dier: { name: "Dier", color: "var(--me-success)" },
+      beweging: { name: "Beweging", color: "var(--me-text-secondary)" },
+    };
+    const PAGE = 60;
+    const state = { camera: null, label: null, important: true, items: [], total: 0, cams: [], current: -1, faces: { enabled: false, people: {} }, plates: { enabled: false, known: {} } };
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    // filter onthouden per apparaat (mag ontbreken)
+    try {
+      const saved = JSON.parse(localStorage.getItem("camsvc-filter") || "{}");
+      state.camera = saved.camera || null;
+      state.label = saved.label || null;
+      state.person = saved.person || null;
+      state.plate = saved.plate || null;
+      state.important = saved.important !== false;
+    } catch {}
+    const saveFilter = () => { try { localStorage.setItem("camsvc-filter", JSON.stringify({ camera: state.camera, label: state.label, person: state.person, plate: state.plate, important: state.important })); } catch {} };
+
+    async function api(path) {
+      const r = await fetch(path, { cache: "no-store" });
+      if (r.status === 401) { location.href = `/login?next=${encodeURIComponent(location.pathname + location.search)}`; throw new Error(401); }
+      if (!r.ok) throw new Error(r.status);
+      return r.json();
+    }
+    const camName = (id) => state.cams.find((c) => c.name === id)?.friendly_name || id;
+    const fmtTime = (iso) => new Date(iso).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
+    const fmtTimeS = (iso) => new Date(iso).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const fmtDur = (s) => s >= 60 ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : `${Math.round(s)} s`;
+    function dayLabel(d) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const day = new Date(d); day.setHours(0, 0, 0, 0);
+      const diff = Math.round((today - day) / 86400000);
+      if (diff === 0) return "Vandaag";
+      if (diff === 1) return "Gisteren";
+      const s = day.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" });
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    }
+
+    // ---------- camera's en status ----------
+    const frames = {};   // laatst geladen beeld per camera, tegen flikkeren
+    function renderCams() {
+      $("cams").innerHTML = state.cams.map((c) => {
+        const who = c.face && !["geen", "onbekend"].includes(c.face) ? `<span class="badge who">${esc(c.face)}</span>` : "";
+        const badge = !c.online ? '<span class="badge offline">Offline</span>'
+          : `<span class="badges">${who}${c.loitering ? '<span class="badge loiter">Rondhangen</span>' : ""}${
+            c.event_active ? '<span class="badge rec">Opname</span>' : c.motion ? '<span class="badge motion">Beweging</span>' : ""}</span>`;
+        return `<button class="cam${state.camera === c.name ? " active" : ""}" data-cam="${esc(c.name)}" aria-pressed="${state.camera === c.name}">
+          <span class="tile-btns">
+            ${c.live ? `<span class="tile-btn live" role="button" tabindex="0" data-live="${esc(c.name)}" title="Live bekijken" aria-label="${esc(c.friendly_name)} live bekijken">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>` : ""}
+          </span>
+          <div class="img" data-frame="${esc(c.name)}" ${frames[c.name] ? `style="background-image:url('${frames[c.name]}')"` : ""}></div>
+          <div class="meta"><span class="name"><span class="dot ${c.online ? "on" : "off"}"></span><h3>${esc(c.friendly_name)}</h3></span>${badge}</div>
+        </button>`;
+      }).join("");
+      refreshFrames();
+    }
+    function refreshFrames() {
+      // eerst laden, dan pas wisselen: geen flikkering
+      document.querySelectorAll("[data-frame]").forEach((el) => {
+        const url = `/api/cameras/${encodeURIComponent(el.dataset.frame)}/frame.jpg?t=${Date.now()}`;
+        const img = new Image();
+        img.onload = () => { frames[el.dataset.frame] = url; el.style.backgroundImage = `url("${url}")`; };
+        img.src = url;
+      });
+    }
+    function renderChips() {
+      $("importantChip").setAttribute("aria-pressed", String(state.important));
+      const active = [state.camera, state.label, state.person, state.plate].filter(Boolean).length;
+      $("filterToggle").innerHTML = `Filter${active ? ` <b>${active}</b>` : ""}`;
+      $("camChips").innerHTML = [{ name: null, friendly_name: "Alle camera's" }, ...state.cams].map((c) =>
+        `<button class="chip" data-cam="${esc(c.name ?? "")}" aria-pressed="${state.camera === c.name}">${esc(c.friendly_name)}</button>`).join("");
+      $("labelChips").innerHTML = [[null, { name: "Alles" }], ...Object.entries(LABELS)].map(([k, l]) =>
+        `<button class="chip" data-label="${k ?? ""}" aria-pressed="${state.label === k}">${k ? `<span class="sw" style="background:${l.color}"></span>` : ""}${l.name}</button>`).join("");
+      const people = Object.keys(state.faces.people);
+      const cars = Object.entries(state.plates.known);
+      $("personChips").innerHTML = (state.faces.enabled && people.length
+        ? [[null, "Iedereen"], ...people.map((n) => [n, n]), ["onbekend", "Onbekend"]].map(([k, n]) =>
+          `<button class="chip" data-person="${esc(k ?? "")}" aria-pressed="${!state.plate && state.person === k}">${k && k !== "onbekend" ? '<span class="sw" style="background:var(--me-primary)"></span>' : ""}${esc(n)}</button>`).join("")
+        : "") + cars.map(([plate, name]) =>
+          `<button class="chip" data-plate="${esc(plate)}" aria-pressed="${state.plate === plate}" title="${esc(plate)}"><span class="sw" style="background:var(--me-violet)"></span>${esc(name)}</button>`).join("");
+    }
+    async function loadStatus() {
+      try {
+        const [cams, st] = await Promise.all([api("/api/cameras"), api("/api/status")]);
+        $("banner").classList.remove("show");
+        const first = !state.cams.length;
+        state.cams = cams;
+        if (state.camera && !cams.some((c) => c.name === state.camera)) state.camera = null;
+        renderCams();
+        if (first) renderChips();
+        const gb = st.storage.used_gb.toLocaleString("nl-NL", { maximumFractionDigits: 1 });
+        $("stats").innerHTML = `
+          <span class="pill"><span class="dot ${cams.every((c) => c.online) ? "on" : "off"}"></span><b>${cams.filter((c) => c.online).length}/${cams.length}</b> online</span>
+          ${state.faces.enabled ? `<button class="pill link" id="openPeople">Gezichten <b>${Object.keys(state.faces.people).length}</b>${state.faces.unknown ? ` <span class="muted">· ${state.faces.unknown} onbekend</span>` : ""}</button>` : ""}
+          ${state.plates.enabled ? `<button class="pill link" id="openPlates">Kentekens <b>${Object.keys(state.plates.known).length}</b></button>` : ""}
+          <button class="pill link" id="openBeheer" title="Instellingen, maskers, opslag en server">Beheer${
+            st.mqtt_connected !== false && (!st.ai || ["ready", "uit"].includes(st.ai.state)) ? "" : ' <span class="dot off"></span>'}</button>`;
+        state.status = st;
+        state.gb = gb;
+        if ($("beheerDlg").open) renderBeheer();
+        return first;
+      } catch {
+        $("banner").classList.add("show");
+        return false;
+      }
+    }
+
+    // ---------- tijdlijn ----------
+    function query(offset, limit) {
+      const p = new URLSearchParams({ offset, limit });
+      if (state.camera) p.set("camera", state.camera);
+      if (state.label) p.set("label", state.label);
+      if (state.person) p.set("person", state.person);
+      if (state.plate) p.set("plate", state.plate);
+      if (state.q) p.set("q", state.q);
+      if (state.day) p.set("day", state.day);
+      if (state.important) p.set("belangrijk", "true");
+      return `/api/events?${p}`;
+    }
+    async function loadEvents(reset = true) {
+      try {
+        const limit = reset ? Math.max(PAGE, state.items.length) : PAGE;
+        const data = await api(query(reset ? 0 : state.items.length, limit));
+        state.items = reset ? data.items : state.items.concat(data.items);
+        state.total = data.total;
+        renderTimeline();
+      } catch {
+        $("banner").classList.add("show");
+      }
+    }
+    // ---------- passkeys ----------
+    const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const unb64 = (v) => Uint8Array.from(atob(v.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((v.length + 3) % 4)), (c) => c.charCodeAt(0));
+    async function postJSON(path, body) {
+      const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.detail || "Er ging iets mis");
+      return data;
+    }
+    async function renderKeys() {
+      let list = [];
+      try { list = (await api("/api/auth/credentials")).credentials; } catch {}
+      $("keysList").innerHTML = list.length ? list.map((c) => `
+        <div class="person"><h3><span>${esc(c.naam)} <span class="muted" style="font-size:.78rem;font-weight:500;margin-left:.35rem">sinds ${esc(c.aangemaakt)} · laatst ${esc(c.laatst)}</span></span>
+          <button class="link-red" data-key-del="${esc(c.id)}">Verwijderen</button></h3></div>`).join("")
+        : `<div class="empty"><h3>Geen passkeys</h3>Er wordt een nieuwe koppelcode gemaakt.</div>`;
+    }
+    $("keysAdd").onclick = async () => {
+      const name = (prompt("Naam van dit apparaat:", /iPhone/.test(navigator.userAgent) ? "iPhone" : "MacBook") || "").trim();
+      if (!name) return;
+      try {
+        const { challenge_id, options: o } = await postJSON("/api/auth/register/options");
+        o.challenge = unb64(o.challenge); o.user.id = unb64(o.user.id);
+        o.excludeCredentials = (o.excludeCredentials || []).map((c) => ({ ...c, id: unb64(c.id) }));
+        const c = await navigator.credentials.create({ publicKey: o });
+        const response = { clientDataJSON: b64(c.response.clientDataJSON), attestationObject: b64(c.response.attestationObject),
+                           transports: c.response.getTransports ? c.response.getTransports() : [] };
+        await postJSON("/api/auth/register", { challenge_id, name,
+          credential: { id: c.id, rawId: b64(c.rawId), type: c.type, response, clientExtensionResults: c.getClientExtensionResults() } });
+        renderKeys();
+      } catch (e) { if (e.name !== "NotAllowedError") alert(e.message); }
+    };
+    $("keysLogout").onclick = async () => { await postJSON("/api/auth/logout"); location.href = "/login"; };
+    $("keysLogoutAll").onclick = async () => {
+      if (!confirm("Alle apparaten uitloggen? Je moet daarna overal opnieuw inloggen met je passkey.")) return;
+      await postJSON("/api/auth/logout-all"); location.href = "/login";
+    };
+    $("keysList").addEventListener("click", async (ev) => {
+      const del = ev.target.closest("[data-key-del]");
+      if (!del || !confirm("Deze passkey verwijderen? Dat apparaat kan dan niet meer inloggen.")) return;
+      await fetch(`/api/auth/credentials/${encodeURIComponent(del.dataset.keyDel)}`, { method: "DELETE" });
+      renderKeys();
+    });
+
+    // ---------- dag kiezen + dagoverzicht ----------
+    const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return isoDay(d); };
+    function setDay(day) {
+      state.day = day || null;
+      $("dayInput").value = state.day || "";
+      document.querySelectorAll("[data-day]").forEach((b) => b.setAttribute("aria-pressed", String(state.day === daysAgo(Number(b.dataset.day)))));
+      $("dayInput").classList.toggle("on", !!state.day && ![0, 1].some((n) => daysAgo(n) === state.day));
+      state.items = []; loadEvents(); loadSummary();
+    }
+    async function loadSummary() {
+      const el = $("summary");
+      if (!state.day) { el.innerHTML = ""; return; }
+      let s;
+      try { s = await api(`/api/summary?day=${state.day}`); } catch { el.innerHTML = ""; return; }
+      const known = Object.keys(s.personen).length;
+      const stat = (n, label) => `<div class="stat"><b>${n}</b><span>${label}</span></div>`;
+      el.innerHTML = `
+        <div class="sum-stats">
+          ${stat(s.events, s.events === 1 ? "opname" : "opnames")}
+          ${stat(s.aanbellen, "aangebeld")}
+          ${stat(s.pakketten, s.pakketten === 1 ? "pakketje" : "pakketjes")}
+          ${stat(s.persoon_events, "met een persoon")}
+          ${stat(known, known === 1 ? "bekende" : "bekenden")}
+          ${stat(s.onbekende_personen, "onbekend gezicht")}
+          ${stat(s.autos.length, s.autos.length === 1 ? "auto" : "auto's")}
+          ${s.vals ? stat(s.vals, "niets aan de hand") : ""}
+        </div>
+        ${known || s.autos.length ? `<div class="who-row">
+          ${Object.entries(s.personen).map(([n, p]) => `<span class="pill">${esc(n)} <b>${p.aantal}×</b> ${p.eerst}${p.laatst !== p.eerst ? `–${p.laatst}` : ""}</span>`).join("")}
+          ${s.autos.map((c) => `<span class="pill"><span class="plate-txt">${esc(c.plate)}</span> ${c.naam ? esc(c.naam) : "onbekend"} · ${c.eerst}</span>`).join("")}
+        </div>` : ""}
+        <div class="txt">${esc(s.tekst)}${s.drukste_uur ? ` Drukste uur: ${s.drukste_uur}.` : ""}</div>`;
+    }
+    document.querySelectorAll("[data-day]").forEach((b) => b.addEventListener("click", () => {
+      const d = daysAgo(Number(b.dataset.day));
+      setDay(state.day === d ? null : d);
+    }));
+    $("dayInput").addEventListener("change", () => setDay($("dayInput").value || null));
+
+    function renderTimeline() {
+      const tl = $("timeline");
+      if (!state.items.length) {
+        tl.innerHTML = `<div class="empty"><h3>Geen opnames</h3>${state.q ? `Niets gevonden voor “${esc(state.q)}”.` : state.camera || state.label || state.person || state.plate ? "Niets gevonden met dit filter." : state.important ? "Niets belangrijks. Zet “Alleen belangrijk” uit om alles te zien." : "Er is nog niets opgenomen."}</div>`;
+        $("more").hidden = true;
+        return;
+      }
+      let html = "", lastDay = "";
+      state.items.forEach((e, i) => {
+        const d = new Date(e.start);
+        const key = d.toDateString();
+        if (key !== lastDay) {
+          if (lastDay) html += "</div>";
+          const n = state.items.filter((x) => new Date(x.start).toDateString() === key).length;
+          html += `<div class="day"><h2>${dayLabel(d)}</h2><span class="eyebrow">${n} ${n === 1 ? "opname" : "opnames"}</span></div><div class="grid">`;
+          lastDay = key;
+        }
+        const l = LABELS[e.label] || LABELS.beweging;
+        const snap = e.snapshot ? `style="background-image:url('/clips/${encodeURI(e.snapshot)}')"` : "";
+        const names = [knownNames(e), ...(e.plates || []).map((p) => state.plates.known[p.plate] || p.plate)].filter(Boolean).join(", ");
+        html += `<button class="ev${e.vals ? " vals" : ""}" data-i="${i}">
+          <div class="thumb" ${snap}><span class="badge l-${esc(e.label)}">${l.name}</span>${e.vals ? `<span class="badge warn vals">${e.vals === "ai" ? "Waarschijnlijk niets" : "Niets"}</span>` : ""}<span class="dur">${fmtDur(e.duration)}</span></div>
+          <div class="body"><span class="time">${fmtTime(e.start)}</span><span class="sub">${names ? `<span class="names">${esc(names)}</span> · ` : ""}${esc(camName(e.camera))}</span></div>
+        </button>`;
+      });
+      tl.innerHTML = html + "</div>";
+      attachPreviews();
+      $("more").hidden = state.items.length >= state.total;
+    }
+
+    // ---------- speler ----------
+    function openEvent(i) {
+      const e = state.items[i];
+      if (!e) return;
+      state.current = i;
+      const l = LABELS[e.label] || LABELS.beweging;
+      const d = new Date(e.start);
+      $("pTitle").innerHTML = `${esc(camName(e.camera))} <span class="badge l-${esc(e.label)}">${l.name}</span>`;
+      const others = (e.labels || []).filter((x) => x !== e.label).map((x) => LABELS[x]?.name.toLowerCase() || x);
+      $("pSub").textContent = `${dayLabel(d)}, ${fmtTimeS(e.start)} · ${fmtDur(e.duration)}`
+        + (others.length ? ` · ook ${others.join(", ")}` : "")
+        + (e.zones?.length ? ` · zone ${e.zones.join(", ")}` : "")
+        + (e.vermoedelijk?.length ? ` · waarschijnlijk ${e.vermoedelijk.join(", ")}` : "")
+        + (e.vals === "ai" ? " · waarschijnlijk niets: de AI zag niemand" : e.vals ? " · gemarkeerd als niets aan de hand" : "");
+      $("pFalse").textContent = e.vals ? "Toch belangrijk" : "Niets aan de hand";
+      const v = $("pVideo");
+      v.poster = e.snapshot ? `/clips/${encodeURI(e.snapshot)}` : "";
+      v.src = `/clips/${encodeURI(e.clip)}`;
+      v.play().catch(() => {});
+      $("pDownload").href = v.src;
+      $("pDownload").download = `${e.camera}_${e.clip.split("/").pop()}`;
+      renderFaces(e);
+      renderPlates(e);
+      renderAi(e);
+      $("pPrev").disabled = i <= 0;
+      $("pNext").disabled = i >= state.items.length - 1 && state.items.length >= state.total;
+      if (!$("player").open) $("player").showModal();
+    }
+    async function step(dir) {
+      const i = state.current + dir;
+      if (i >= state.items.length && state.items.length < state.total) await loadEvents(false);
+      openEvent(i);
+    }
+    function closePlayer() {
+      const v = $("pVideo");
+      v.pause(); v.removeAttribute("src"); v.load();
+      if ($("player").open) $("player").close();
+      state.current = -1;
+    }
+
+    // ---------- gezichten ----------
+    const knownNames = (e) => [...new Set((e.faces || []).map((f) => f.name).filter(Boolean))].join(", ");
+    async function loadFaces() {
+      try { state.faces = await api("/api/faces"); } catch {}
+    }
+    function renderFaces(e) {
+      const el = $("pFaces");
+      if (!state.faces.enabled || !e.faces?.length) { el.innerHTML = ""; return; }
+      const names = Object.keys(state.faces.people);
+      el.innerHTML = e.faces.map((f, k) => `
+        <div class="face${f.name ? " known" : ""}">
+          <img src="/clips/${encodeURI(f.crop)}" alt="">
+          <span class="nm">${f.name ? esc(f.name) : "Onbekend"}</span>
+          <select data-face="${k}" aria-label="Wie is dit?">
+            <option value="">${f.name ? "Anders…" : "Wie is dit?"}</option>
+            ${names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("")}
+            <option value="__new">+ Nieuwe persoon…</option>
+          </select>
+        </div>`).join("");
+    }
+    async function learnFace(k, name) {
+      const e = state.items[state.current];
+      const f = e?.faces?.[k];
+      if (!f) return;
+      const r = await fetch(`/api/faces/${encodeURIComponent(name)}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ crop: f.crop }),
+      });
+      if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Opslaan mislukt"); return; }
+      const data = await r.json();
+      f.name = name;
+      Object.assign(state.faces, data);
+      renderFaces(e); renderTimeline(); loadStatus();
+    }
+    const fmtDay = (iso) => new Date(iso).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
+    let unknownGroups = [];
+    function nameOptions(selected) {
+      const names = Object.keys(state.faces.people);
+      return `<option value="">Wie is dit?</option>
+        ${names.map((n) => `<option value="${esc(n)}"${n === selected ? " selected" : ""}>${esc(n)}</option>`).join("")}
+        <option value="__new">+ Nieuwe persoon…</option>`;
+    }
+    function renderUnknown() {
+      if (!unknownGroups.length) return "";
+      return `<h4>Onbekende gezichten</h4>
+        <div class="unknowns">${unknownGroups.slice(0, 40).map((g, k) => `
+          <div class="ugroup">
+            <div class="samples">${g.samples.map((id) => `<img src="/api/unknown-faces/${id}.jpg" alt="" loading="lazy">`).join("")}</div>
+            <div class="meta"><b>${g.count}× gezien</b> · ${g.first.slice(0, 10) === g.last.slice(0, 10) ? `${fmtDay(g.last)} ${fmtTime(g.last)}` : `${fmtDay(g.first)} – ${fmtDay(g.last)}`} · ${g.cameras.map((c) => esc(camName(c))).join(", ")}
+              ${g.suggest ? `<br><span class="hint">Lijkt op ${esc(g.suggest)}</span>` : ""}</div>
+            <div class="row">
+              <select data-ugroup="${k}" aria-label="Wie is dit?">${nameOptions(g.suggest)}</select>
+              <button class="btn primary" data-uassign="${k}">Opslaan</button>
+              <button class="btn" data-udismiss="${k}" title="Niet bewaren">Negeren</button>
+            </div>
+          </div>`).join("")}</div>
+        <h4>Bekende personen</h4>`;
+    }
+    async function renderPeople() {
+      if (state.faces.enabled) {
+        try { unknownGroups = (await api("/api/unknown-faces")).groups; } catch { unknownGroups = []; }
+      }
+      const people = Object.entries(state.faces.people);
+      const auto = state.faces.auto || {};
+      const sample = (name, id, isAuto) => `<div class="sample${isAuto ? " auto" : ""}"><img src="/api/faces/${encodeURIComponent(name)}/${isAuto ? "auto/" : ""}${id}.jpg" alt="">
+            <button data-del="${esc(name)}|${isAuto ? "auto/" : ""}${id}" aria-label="Foto verwijderen">✕</button></div>`;
+      $("people").innerHTML = renderUnknown() + (people.length ? people.map(([name, ids]) => {
+        const autos = auto[name] || [];
+        return `
+        <div class="person">
+          <h3><span>${esc(name)} <span class="muted" style="font-size:.78rem;font-weight:500;font-family:var(--me-font);margin-left:.35rem">${ids.length} foto${ids.length === 1 ? "" : "'s"}${autos.length ? ` + ${autos.length} zelf geleerd` : ""}</span></span>
+            <button class="link-red" data-forget="${esc(name)}">Vergeten</button></h3>
+          <div class="samples">${ids.map((id) => sample(name, id, false)).join("")}${autos.map((id) => sample(name, id, true)).join("")}</div>
+        </div>`; }).join("")
+        : `<div class="empty"><h3>Nog niemand geleerd</h3>Geef hierboven een onbekend gezicht een naam, of open een event met een persoon.</div>`);
+    }
+    async function postUnknown(path, body) {
+      const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Opslaan mislukt"); return null; }
+      const data = await r.json();
+      Object.assign(state.faces, data);
+      return data;
+    }
+    async function assignUnknown(k, name) {
+      const g = unknownGroups[k];
+      if (!g || !name) return;
+      const data = await postUnknown("/api/unknown-faces/assign", { ids: g.ids, name });
+      if (!data) return;
+      renderPeople(); renderChips(); state.items = []; loadEvents(); loadStatus();
+    }
+    async function forget(path) {
+      const r = await fetch(path, { method: "DELETE" });
+      if (r.ok) { Object.assign(state.faces, await r.json()); renderPeople(); loadStatus(); }
+    }
+
+    document.addEventListener("change", (ev) => {
+      const sel = ev.target.closest("[data-face]");
+      if (!sel || !sel.value) return;
+      let name = sel.value;
+      if (name === "__new") name = (prompt("Naam van deze persoon:") || "").trim();
+      if (name) learnFace(Number(sel.dataset.face), name); else sel.value = "";
+    });
+
+    // ---------- live ----------
+    function openLive(name) {
+      const c = state.cams.find((x) => x.name === name);
+      if (!c?.live) return;
+      $("liveTitle").textContent = `${c.friendly_name} – live`;
+      $("liveFrame").src = c.live;
+      $("liveDlg").showModal();
+    }
+    // het close-event komt pas na het openen van een volgende camera binnen: dan niet leegmaken
+    $("liveDlg").addEventListener("close", () => { if (!$("liveDlg").open) $("liveFrame").src = "about:blank"; });
+
+    // ---------- instellingen ----------
+    const SET_GROUPS = [
+      ["Opname", ["pre_seconds", "post_seconds", "max_clip_seconds"]],
+      ["Detectie", ["objects.labels.persoon", "objects.labels.voertuig", "objects.labels.dier", "objects.min_score", "objects.verify_below", "motion.min_area", "motion.threshold"]],
+      ["Extra", ["objects.always", "objects.loiter_seconds", "faces.enabled", "faces.auto_learn", "faces.collect_unknown", "plates.enabled"]],
+    ];
+    // weergave: min_area en min_score als percentage
+    const PCT = { "motion.min_area": 100, "objects.min_score": 100 };
+    const setState = { cam: null, schema: {} };
+    async function openSettings(name) {
+      const data = await api(`/api/cameras/${encodeURIComponent(name)}/settings`);
+      setState.cam = name; setState.schema = data.schema;
+      $("setTitle").textContent = `Instellingen – ${camName(name)}`;
+      $("setForm").innerHTML = SET_GROUPS.map(([title, paths]) => `<div><h4>${title}</h4>${paths.map((p) => {
+        const sc = data.schema[p], v = data.values[p], f = PCT[p] || 1;
+        if (sc.type === "bool") return `<label class="field"><span>${esc(sc.label)}</span><span class="switch"><input type="checkbox" data-set="${p}" ${v ? "checked" : ""}><span></span></span></label>`;
+        const step = p === "motion.min_area" ? 0.05 : p.includes("min_score") ? 1 : 1;
+        return `<label class="field"><span>${esc(sc.label)}</span><span><input type="number" data-set="${p}" min="${sc.min * f}" max="${sc.max * f}" step="${step}" value="${+(v * f).toFixed(2)}">${f === 100 ? '<span class="unit">%</span>' : ""}</span></label>`;
+      }).join("")}</div>`).join("");
+      $("setDlg").showModal();
+    }
+    $("setSave").onclick = async () => {
+      const body = {};
+      document.querySelectorAll("[data-set]").forEach((el) => {
+        const p = el.dataset.set, sc = setState.schema[p];
+        if (sc.type === "bool") body[p] = el.checked;
+        else { const v = Number(el.value) / (PCT[p] || 1); body[p] = sc.type === "int" ? Math.round(v) : v; }
+      });
+      const r = await fetch(`/api/cameras/${encodeURIComponent(setState.cam)}/settings`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Opslaan mislukt"); return; }
+      $("setDlg").close();
+      await Promise.all([loadFaces(), loadPlates()]); renderChips(); loadStatus();
+    };
+
+    // ---------- masker en zones ----------
+    // twee sets vlakken in procenten: het masker (negeren) en zones (alleen daar telt een object)
+    const MASK_DESC = {
+      mask: "Rode vlakken worden genegeerd: geen beweging, en objecten die daar met hun onderkant staan tellen niet mee.",
+      zones: "Violette zones: zijn er zones, dan tellen alleen objecten die met hun onderkant in een zone staan. Geen zones = het hele beeld. Events krijgen de naam van de zone.",
+    };
+    const mask = { cam: null, mode: "mask", sets: { mask: { polys: [], names: [], dirty: false }, zones: { polys: [], names: [], dirty: false } }, draft: [] };
+    const cur = () => mask.sets[mask.mode];
+    const anyDirty = () => mask.sets.mask.dirty || mask.sets.zones.dirty;
+    async function openMask(name) {
+      mask.cam = name; mask.draft = []; mask.mode = "mask";
+      const enc = encodeURIComponent(name);
+      const [m, z] = await Promise.all([api(`/api/cameras/${enc}/mask`).catch(() => ({ mask: [] })),
+                                        api(`/api/cameras/${enc}/zones`).catch(() => ({ zones: [] }))]);
+      mask.sets.mask = { polys: m.mask || [], names: [], dirty: false };
+      mask.sets.zones = { polys: (z.zones || []).map((q) => q.points), names: (z.zones || []).map((q) => q.name), dirty: false };
+      $("maskTitle").textContent = `Masker en zones – ${camName(name)}`;
+      $("mImg").src = `/api/cameras/${enc}/frame.jpg?t=${Date.now()}`;
+      setMode("mask");
+      $("maskDlg").showModal();
+    }
+    function setMode(mode) {
+      mask.mode = mode; mask.draft = [];
+      document.querySelectorAll("[data-mmode]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.mmode === mode)));
+      $("mDesc").textContent = MASK_DESC[mode];
+      $("mStage").classList.toggle("zones", mode === "zones");
+      renderMask();
+    }
+    function renderMask() {
+      // vlakken in procenten; de svg rekt mee met het beeld
+      const set = cur(), zones = mask.mode === "zones";
+      const pts = (p) => p.map(([x, y]) => `${x},${y}`).join(" ");
+      $("mSvg").innerHTML = set.polys.map((p) =>
+        `<polygon class="m-poly" points="${pts(p)}" vector-effect="non-scaling-stroke"/>`).join("")
+        + (mask.draft.length ? `<polyline class="m-draft" points="${pts(mask.draft)}" vector-effect="non-scaling-stroke"/>` : "");
+      const centroid = (p) => [p.reduce((s, q) => s + q[0], 0) / p.length, p.reduce((s, q) => s + q[1], 0) / p.length];
+      $("mDots").innerHTML = mask.draft.map(([x, y], i) =>
+        `<span class="pt${i === 0 && mask.draft.length >= 3 ? " first" : ""}" ${i === 0 ? 'data-close-poly' : ""} style="left:${x}%;top:${y}%"></span>`).join("")
+        + set.polys.map((p, i) => {
+          const [x, y] = centroid(p);
+          const del = `<button class="del" data-del-poly="${i}" ${zones ? "" : `style="left:${x}%;top:${y}%"`} aria-label="Vlak verwijderen">✕</button>`;
+          return zones ? `<span class="zname" style="left:${x}%;top:${y}%">${esc(set.names[i])}${del}</span>` : del;
+        }).join("");
+      const noun = zones ? ["zone", "zones"] : ["vlak", "vlakken"];
+      $("mHint").textContent = mask.draft.length
+        ? (mask.draft.length < 3 ? "Klik nog minstens " + (3 - mask.draft.length) + " punt(en)." : "Klik op het eerste punt (rondje) om het vlak te sluiten.")
+        : `${set.polys.length} ${set.polys.length === 1 ? noun[0] : noun[1]}. Klik punten om ${zones ? "een nieuwe zone" : "een nieuw vlak"} te tekenen.`;
+      $("mUndo").disabled = !mask.draft.length;
+      $("mClear").disabled = !set.polys.length && !mask.draft.length;
+      $("mSave").disabled = !anyDirty() || mask.draft.length > 0;
+      // svg en punten precies over het getoonde beeld leggen (object-fit: contain)
+      const img = $("mImg"), st = $("mStage").getBoundingClientRect(), r = img.getBoundingClientRect();
+      const nw = img.naturalWidth || 16, nh = img.naturalHeight || 9;
+      const s = Math.min(r.width / nw, r.height / nh), w = nw * s, h = nh * s;
+      const box = `left:${r.left - st.left + (r.width - w) / 2}px;top:${r.top - st.top + (r.height - h) / 2}px;width:${w}px;height:${h}px;position:absolute`;
+      $("mSvg").setAttribute("style", box); $("mDots").setAttribute("style", box);
+      mask.box = { x: r.left + (r.width - w) / 2, y: r.top + (r.height - h) / 2, w, h };
+    }
+    $("mImg").addEventListener("load", renderMask);
+    window.addEventListener("resize", () => { if ($("maskDlg").open) renderMask(); });
+    document.querySelectorAll("[data-mmode]").forEach((b) => b.addEventListener("click", () => {
+      if (mask.draft.length && !confirm("Het half getekende vlak weggooien?")) return;
+      setMode(b.dataset.mmode);
+    }));
+    $("mStage").addEventListener("click", (ev) => {
+      const set = cur();
+      if (ev.target.closest("[data-del-poly]")) {
+        const i = Number(ev.target.closest("[data-del-poly]").dataset.delPoly);
+        set.polys.splice(i, 1); set.names.splice(i, 1);
+        set.dirty = true; renderMask(); return;
+      }
+      if (ev.target.closest("[data-close-poly]") && mask.draft.length >= 3) {
+        if (mask.mode === "zones") {
+          const name = (prompt("Naam van deze zone (bijv. Oprit, Voordeur):", `Zone ${set.polys.length + 1}`) || "").trim().slice(0, 30);
+          if (!name) return;
+          if (set.names.some((n) => n.toLowerCase() === name.toLowerCase())) { alert("Die naam bestaat al."); return; }
+          set.names.push(name);
+        }
+        set.polys.push(mask.draft); mask.draft = []; set.dirty = true; renderMask(); return;
+      }
+      if (ev.target.closest(".zname")) return;
+      const b = mask.box;
+      const x = (ev.clientX - b.x) / b.w * 100, y = (ev.clientY - b.y) / b.h * 100;
+      if (x < -2 || x > 102 || y < -2 || y > 102) return;
+      const clamp = (v) => Math.round(Math.min(100, Math.max(0, v)) * 10) / 10;
+      mask.draft.push([clamp(x), clamp(y)]);
+      renderMask();
+    });
+    $("mUndo").onclick = () => { mask.draft.pop(); renderMask(); };
+    $("mClear").onclick = () => {
+      if (!confirm(mask.mode === "zones" ? "Alle zones van deze camera wissen?" : "Alle maskervlakken van deze camera wissen?")) return;
+      Object.assign(cur(), { polys: [], names: [], dirty: true }); mask.draft = []; renderMask();
+    };
+    $("mSave").onclick = async () => {
+      const enc = encodeURIComponent(mask.cam);
+      const puts = [];
+      if (mask.sets.mask.dirty) puts.push(["mask", { mask: mask.sets.mask.polys }]);
+      if (mask.sets.zones.dirty) puts.push(["zones", { zones: mask.sets.zones.polys.map((p, i) => ({ name: mask.sets.zones.names[i], points: p })) }]);
+      for (const [what, body] of puts) {
+        const r = await fetch(`/api/cameras/${enc}/${what}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Opslaan mislukt"); return; }
+        mask.sets[what].dirty = false;
+      }
+      $("maskDlg").close();
+    };
+    $("maskDlg").addEventListener("cancel", (ev) => {
+      if (anyDirty() && !confirm("Wijzigingen aan masker en zones niet opslaan?")) ev.preventDefault();
+    });
+
+    // ---------- AI-beschrijving (lokaal vision-model) ----------
+    const AI_REDEN = { breaker: "AI-server tijdelijk overgeslagen", connection: "AI-server niet bereikbaar",
+      model_missing: "model ontbreekt op de AI-server", truncated: "antwoord afgebroken", schema: "ongeldig antwoord",
+      not_json: "ongeldig antwoord", vervangen: "nieuwer beeld gebruikt", wachtrij_vol: "te druk", rate_limit: "te druk",
+      invalid_image: "beeld ongeschikt", image_too_large: "beeld te groot" };
+    function renderAi(e) {
+      const el = $("pAi"), a = e.ai;
+      if (!a) { el.innerHTML = ""; return; }
+      if (a.status !== "ok") {
+        const why = AI_REDEN[a.reden] || a.reden || a.status;
+        el.innerHTML = `<div class="ai-head"><span class="eyebrow">AI-beschrijving</span><span class="badge">${esc(why)}</span></div>`;
+        return;
+      }
+      // het oordeel over de beeldkwaliteit is bij kleine modellen onbetrouwbaar: niet tonen
+      el.innerHTML = `
+        <div class="ai-head"><span class="eyebrow">AI-beschrijving</span>
+          ${a.infrarood ? '<span class="badge">Infrarood</span>' : ""}
+          <span class="muted" style="font-size:.75rem">${esc(a.model)} · lokaal</span></div>
+        <div class="ai-text">${esc(a.beschrijving)}</div>
+        ${a.kenmerken?.length ? `<div class="ai-tags">${a.kenmerken.map((o) => `<span class="badge who">${esc(o)}</span>`).join("")}</div>` : ""}
+        ${a.objecten?.length ? `<div class="ai-tags">${a.objecten.map((o) => `<span class="badge">${esc(o)}</span>`).join("")}</div>` : ""}
+        ${a.onzekerheden?.length ? `<div class="ai-note"><ul>${a.onzekerheden.map((o) => `<li>${esc(o)}</li>`).join("")}</ul></div>` : ""}
+        ${e.extern ? `<div class="ai-head" style="margin-top:.6rem"><span class="eyebrow">Externe AI</span>
+          <span class="badge ${e.extern.melden ? "ok" : ""}">${e.extern.melden ? "Gemeld" : "Niet gemeld"}</span></div>
+          <div class="ai-text">${esc(e.extern.titel ? `${e.extern.titel}: ${e.extern.beschrijving}` : e.extern.beschrijving)}</div>` : ""}`;
+    }
+
+    // ---------- vals alarm ----------
+    $("pFalse").addEventListener("click", async () => {
+      const e = state.items[state.current];
+      if (!e) return;
+      $("pFalse").disabled = true;
+      try {
+        const r = await fetch("/api/events/vals", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clip: e.clip, vals: !e.vals }) });
+        if (r.status === 401) { location.href = "/login"; return; }
+        if (!r.ok) throw new Error(r.status);
+        const res = await r.json();
+        e.vals = res.vals;
+        openEvent(state.current);
+        renderTimeline();
+        if (res.plek_onthouden) $("pSub").textContent += " · dit ding op deze plek wordt voortaan genegeerd";
+      } catch { $("pSub").textContent += " · opslaan mislukt"; }
+      $("pFalse").disabled = false;
+    });
+
+    // ---------- AI-vergelijking ----------
+    async function renderCompare() {
+      const el = $("cmpBody");
+      el.innerHTML = '<div class="muted">Laden…</div>';
+      let c;
+      try { c = await api("/api/ai-vergelijking?days=7"); } catch { el.innerHTML = '<div class="muted">Niet beschikbaar.</div>'; return; }
+      const stat = (n, label) => `<div class="stat"><b>${n}</b><span>${label}</span></div>`;
+      if (!c.events) {
+        el.innerHTML = '<div class="empty"><h3>Nog geen vergelijking</h3>Zodra de externe AI in Home Assistant een persoon beoordeelt, verschijnt die hier naast het lokale oordeel.</div>';
+        return;
+      }
+      const pct = Math.round(100 * c.eens / c.events);
+      el.innerHTML = `<div class="cmp-stats">
+          ${stat(c.events, "beoordeeld")}
+          ${stat(`${pct}%`, "eens")}
+          ${stat(c.alleen_extern, "alleen extern gemeld")}
+          ${stat(c.alleen_lokaal, "alleen lokaal gezien")}
+          ${stat(c.lokaal_mediaan_ms ? `${Math.round(c.lokaal_mediaan_ms / 1000)} s` : "–", "lokaal per beeld")}
+        </div>
+        ${c.oneens.length ? '<span class="eyebrow">Oneens</span>' : ""}
+        ${c.oneens.map((r) => `<div class="cmp-row">
+          ${r.snapshot ? `<img src="/clips/${encodeURI(r.snapshot)}" alt="" loading="lazy">` : "<div></div>"}
+          <div class="txt"><span><b>${esc(camName(r.camera))} · ${dayLabel(new Date(r.start))} ${fmtTime(r.start)}</b></span>
+            <span><b>Extern ${r.extern ? "meldt" : "meldt niet"}:</b> ${esc(r.extern_tekst || "–")}</span>
+            <span><b>Lokaal ${r.lokaal ? "ziet het" : "ziet niets"}:</b> ${esc(r.lokaal_tekst || "–")}</span></div>
+        </div>`).join("")}`;
+    }
+
+    // ---------- kentekens ----------
+    async function loadPlates() {
+      try { state.plates = await api("/api/plates"); } catch {}
+    }
+    function renderPlates(e) {
+      const el = $("pPlates");
+      if (!e.plates?.length) { el.innerHTML = ""; return; }
+      el.innerHTML = e.plates.map((p) => {
+        const name = state.plates.known[p.plate];
+        return `<div class="plate">
+          ${p.crop ? `<img src="/clips/${encodeURI(p.crop)}" alt="">` : ""}
+          <span class="plate-txt">${esc(p.plate)}</span>
+          <span class="nm">${name ? esc(name) : "Onbekende auto"}</span>
+          ${state.plates.enabled ? `<button class="btn" data-plate-name="${esc(p.plate)}">${name ? "Naam wijzigen" : "Naam geven"}</button>` : ""}
+        </div>`;
+      }).join("");
+    }
+    async function namePlate(plate) {
+      const name = (prompt(`Naam voor ${plate} (bijv. Onze auto, Opa en oma):`, state.plates.known[plate] || "") || "").trim();
+      if (!name) return;
+      const r = await fetch(`/api/plates/${encodeURIComponent(plate)}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
+      });
+      if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Opslaan mislukt"); return; }
+      state.plates.known = (await r.json()).known;
+      const e = state.items[state.current];
+      if (e) renderPlates(e);
+      renderTimeline(); renderChips(); loadStatus();
+    }
+    function renderPlatesList() {
+      const known = Object.entries(state.plates.known);
+      $("platesList").innerHTML = known.length ? known.map(([plate, name]) => `
+        <div class="person"><h3><span>${esc(name)} <span class="plate-txt" style="margin-left:.4rem">${esc(plate)}</span></span>
+          <button class="link-red" data-forget-plate="${esc(plate)}">Vergeten</button></h3></div>`).join("")
+        : `<div class="empty"><h3>Nog geen bekende auto's</h3>Open een event met een auto en kies "Naam geven" bij het kenteken.</div>`;
+    }
+
+    // ---------- voorvertoning bij aanwijzen (alleen met muis) ----------
+    const canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+    function attachPreviews() {
+      if (!canHover) return;
+      document.querySelectorAll(".ev").forEach((card) => {
+        const e = state.items[Number(card.dataset.i)];
+        const thumb = card.querySelector(".thumb");
+        if (!e || !thumb) return;
+        let timer = null;
+        card.addEventListener("mouseenter", () => {
+          timer = setTimeout(() => {   // kort wachten: niet bij elke muisbeweging een video laden
+            const v = document.createElement("video");
+            v.muted = true; v.playsInline = true; v.loop = true; v.autoplay = true; v.preload = "auto";
+            v.src = `/clips/${encodeURI(e.clip)}#t=8`;   // ±10 s voorbuffer: begin net voor de detectie
+            thumb.prepend(v);
+          }, 250);
+        });
+        card.addEventListener("mouseleave", () => {
+          clearTimeout(timer);
+          const v = thumb.querySelector("video");
+          if (v) { v.pause(); v.removeAttribute("src"); v.load(); v.remove(); }
+        });
+      });
+    }
+
+    // ---------- zoeken ----------
+    let qTimer = null;
+    $("q").addEventListener("input", () => {
+      clearTimeout(qTimer);
+      qTimer = setTimeout(() => { state.q = $("q").value.trim() || null; state.items = []; loadEvents(); }, 300);
+    });
+
+    // ---------- interactie ----------
+    document.addEventListener("click", (ev) => {
+      if (ev.target.closest("#openBeheer")) { renderBeheer(); $("beheerDlg").showModal(); return; }
+      // vanuit Beheer een ander venster openen: Beheer eerst sluiten
+      if ($("beheerDlg").open && $("beheerDlg").contains(ev.target) && ev.target.closest("[data-settings],[data-mask],#openCompare,#openKeys")) $("beheerDlg").close();
+      if (ev.target.closest("#filterToggle")) {
+        const f = document.querySelector(".filters"); f.classList.toggle("open");
+        $("filterToggle").setAttribute("aria-expanded", String(f.classList.contains("open")));
+        return;
+      }
+      if (ev.target.closest("#importantChip")) {
+        state.important = !state.important; saveFilter(); renderChips(); state.items = []; loadEvents(); return;
+      }
+      const lv = ev.target.closest("[data-live]");
+      if (lv) { openLive(lv.dataset.live); return; }
+      const sb = ev.target.closest("[data-settings]");
+      if (sb) { openSettings(sb.dataset.settings); return; }
+      const dc = ev.target.closest("[data-dlg-close]");
+      if (dc) { $(dc.dataset.dlgClose).close(); return; }
+      const pc = ev.target.closest("[data-person]");
+      if (pc) { state.person = pc.dataset.person || null; state.plate = null; saveFilter(); renderChips(); state.items = []; loadEvents(); return; }
+      const mb = ev.target.closest("[data-mask]");
+      if (mb) { ev.stopPropagation(); openMask(mb.dataset.mask); return; }
+      if (ev.target.closest("[data-mask-close]")) {
+        if (!anyDirty() || confirm("Wijzigingen aan masker en zones niet opslaan?")) $("maskDlg").close();
+        return;
+      }
+      if (ev.target.closest("#openPlates")) { renderPlatesList(); $("platesDlg").showModal(); return; }
+      const pn = ev.target.closest("[data-plate-name]");
+      if (pn) { namePlate(pn.dataset.plateName); return; }
+      const fp = ev.target.closest("[data-forget-plate]");
+      if (fp) {
+        if (confirm(`${fp.dataset.forgetPlate} vergeten?`)) {
+          fetch(`/api/plates/${encodeURIComponent(fp.dataset.forgetPlate)}`, { method: "DELETE" })
+            .then((r) => r.json()).then((d) => { state.plates.known = d.known || {}; renderPlatesList(); renderChips(); renderTimeline(); loadStatus(); });
+        }
+        return;
+      }
+      const pl = ev.target.closest("[data-plate]");
+      if (pl) { state.plate = state.plate === pl.dataset.plate ? null : pl.dataset.plate; state.person = null; saveFilter(); renderChips(); state.items = []; loadEvents(); return; }
+      if (ev.target.closest("#openPeople")) { renderPeople(); $("peopleDlg").showModal(); return; }
+      if (ev.target.closest("#openKeys")) { renderKeys(); $("keysDlg").showModal(); return; }
+      if (ev.target.closest("#openCompare")) { renderCompare(); $("cmpDlg").showModal(); return; }
+      if (ev.target.closest("[data-close]")) { $("peopleDlg").close(); return; }
+      const del = ev.target.closest("[data-del]");
+      if (del) { const [n, id] = del.dataset.del.split("|"); forget(`/api/faces/${encodeURIComponent(n)}/${id}`); return; }
+      const ua = ev.target.closest("[data-uassign]");
+      if (ua) {
+        const sel = document.querySelector(`[data-ugroup="${ua.dataset.uassign}"]`);
+        let name = sel?.value || "";
+        if (name === "__new") name = (prompt("Naam van deze persoon:") || "").trim();
+        if (name) assignUnknown(Number(ua.dataset.uassign), name); else sel?.focus();
+        return;
+      }
+      const ud = ev.target.closest("[data-udismiss]");
+      if (ud) {
+        const g = unknownGroups[Number(ud.dataset.udismiss)];
+        if (g) postUnknown("/api/unknown-faces/dismiss", { ids: g.ids }).then((d) => d && renderPeople().then(loadStatus));
+        return;
+      }
+      const fg = ev.target.closest("[data-forget]");
+      if (fg) { if (confirm(`${fg.dataset.forget} en alle foto's vergeten?`)) forget(`/api/faces/${encodeURIComponent(fg.dataset.forget)}`); return; }
+      if (ev.target === $("peopleDlg")) { $("peopleDlg").close(); return; }
+      const cam = ev.target.closest("[data-cam]");
+      if (cam) {
+        const name = cam.dataset.cam || null;
+        state.camera = cam.classList.contains("cam") && state.camera === name ? null : name;
+        saveFilter(); renderChips(); renderCams(); state.items = []; loadEvents();
+        return;
+      }
+      const lab = ev.target.closest("[data-label]");
+      if (lab) {
+        state.label = lab.dataset.label || null;
+        saveFilter(); renderChips(); state.items = []; loadEvents();
+        return;
+      }
+      const item = ev.target.closest(".ev");
+      if (item) openEvent(Number(item.dataset.i));
+    });
+    $("more").onclick = () => loadEvents(false);
+    $("pClose").onclick = closePlayer;
+    $("pPrev").onclick = () => step(-1);
+    $("pNext").onclick = () => step(1);
+    $("player").addEventListener("close", closePlayer);
+    $("player").addEventListener("click", (ev) => { if (ev.target === $("player")) closePlayer(); });
+    document.addEventListener("keydown", (ev) => {
+      if (!$("player").open) return;
+      if (ev.key === "ArrowLeft" && !$("pPrev").disabled) step(-1);
+      if (ev.key === "ArrowRight" && !$("pNext").disabled) step(1);
+    });
+
+    // ---------- beheer ----------
+    function renderBeheer() {
+      const st = state.status || {}, h = st.health || {}, ai = st.ai || {};
+      const row = (k, v) => `<div class="beheer-row"><span>${k}</span><b>${v}</b></div>`;
+      const dot = (ok) => `<span class="dot ${ok ? "on" : "off"}"></span> `;
+      $("beheerBody").innerHTML = `
+        <div class="beheer-list">
+          ${row("Opslag", `${state.gb ?? "–"} / ${st.storage?.max_gb ?? "–"} GB`)}
+          ${row("Home Assistant", st.mqtt_connected === null ? "niet ingesteld" : dot(st.mqtt_connected) + (st.mqtt_connected ? "verbonden" : "niet verbonden"))}
+          ${h.cpu != null ? row("Server", `CPU ${h.cpu}% · geheugen ${Math.round(h.geheugen ?? 0)}% · schijf ${h.schijf}% vol`) : ""}
+          ${row("Herkenning", esc(st.detector || "uit"))}
+          ${ai.state && ai.state !== "uit" ? row("AI-beschrijvingen", dot(ai.state === "ready") + esc(ai.model || "")) : ""}
+        </div>
+        <span class="eyebrow">Camera's</span>
+        <div class="beheer-list">
+          ${state.cams.map((c) => `<div class="beheer-row"><b>${esc(c.friendly_name)}</b><div class="btns">
+            <button class="btn" data-settings="${esc(c.name)}">Instellingen</button>
+            <button class="btn" data-mask="${esc(c.name)}">Masker en zones</button></div></div>`).join("")}
+        </div>
+        <div class="btns">
+          ${ai.state && ai.state !== "uit" ? '<button class="btn" id="openCompare">AI-vergelijking</button>' : ""}
+          ${state.auth?.enabled ? '<button class="btn" id="openKeys">Passkeys</button>' : ""}
+        </div>`;
+    }
+
+    // ---------- links uit meldingen: ?live=deurbel, ?clip=<pad>, ?camera=hek&open=laatste ----------
+    async function openClip(rel) {
+      let i = state.items.findIndex((e) => e.clip === rel);
+      if (i < 0) {
+        try { state.items.unshift(await api(`/clips/${encodeURI(rel.replace(/\.mp4$/, ".json"))}`)); i = 0; } catch { return; }
+      }
+      openEvent(i);
+    }
+    async function openDeepLink() {
+      const qs = new URLSearchParams(location.search);
+      if (![...qs.keys()].length) return;
+      history.replaceState(null, "", "/");
+      if (qs.get("live")) { openLive(qs.get("live")); return; }
+      if (qs.get("clip")) { await openClip(qs.get("clip")); return; }
+      const cam = qs.get("camera");
+      if (cam && state.cams.some((c) => c.name === cam)) {
+        state.camera = cam; renderChips(); renderCams(); state.items = [];
+        await loadEvents();
+        if (qs.get("open") === "laatste" && state.items.length) openEvent(0);
+      }
+    }
+
+    // ---------- start en verversen ----------
+    (async () => {
+      try { state.auth = await api("/api/auth/state"); } catch {}
+      await Promise.all([loadFaces(), loadPlates()]);
+      await loadStatus();
+      renderChips();
+      await loadEvents();
+      await openDeepLink();
+      setInterval(loadStatus, 5000);
+      setInterval(() => { if (!$("player").open && !document.hidden) loadEvents(); }, 20000);
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadStatus(); loadEvents(); } });
+    })();
+  </script>
+</body>
+</html>
