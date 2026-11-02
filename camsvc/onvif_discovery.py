@@ -1,4 +1,4 @@
-"""RTSP-URL's ophalen via ONVIF als die niet in de config staan."""
+"""Fetch RTSP URLs via ONVIF when they are not in the config."""
 
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ def _with_credentials(uri: str, user: str, password: str) -> str:
 
 
 def discover_streams(host: str, user: str, password: str, port: int = 80) -> tuple[str, str]:
-    """Geeft (main_url, sub_url): het profiel met de hoogste en de laagste resolutie."""
-    from onvif import ONVIFCamera  # pas importeren als het nodig is
+    """Returns (main_url, sub_url): the profile with the highest and the lowest resolution."""
+    from onvif import ONVIFCamera  # only import when needed
 
     cam = ONVIFCamera(host, port, user, password)
     media = cam.create_media_service()
@@ -35,9 +35,9 @@ def discover_streams(host: str, user: str, password: str, port: int = 80) -> tup
         uri = media.GetStreamUri(req).Uri
         pixels = int(venc.Resolution.Width) * int(venc.Resolution.Height)
         found.append((pixels, _with_credentials(uri, user, password)))
-        log.info("ONVIF %s: profiel %s %sx%s", host, profile.token,
+        log.info("ONVIF %s: profile %s %sx%s", host, profile.token,
                  venc.Resolution.Width, venc.Resolution.Height)
     if not found:
-        raise RuntimeError(f"ONVIF {host}: geen videoprofielen gevonden")
+        raise RuntimeError(f"ONVIF {host}: no video profiles found")
     found.sort()
     return found[-1][1], found[0][1]

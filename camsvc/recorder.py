@@ -1,13 +1,11 @@
-"""Main-stream: pakketten bufferen in RAM en clips schrijven zonder te decoderen.
+"""Main stream: buffer packets in RAM and write clips without decoding.
 
-De reader-thread leest gecodeerde pakketten (video + audio) en bewaart de
-laatste `pre_seconds` vanaf een keyframe in een ringbuffer. Bij een event
-schrijft dezelfde thread de buffer en alle nieuwe pakketten naar een MP4
-(stream copy). Alle muxer-acties gebeuren in deze ene thread.
+The reader thread reads encoded packets (video + audio) and keeps the last `pre_seconds`
+starting at a keyframe in a ring buffer. On an event the same thread writes the buffer and all
+new packets to an MP4 (stream copy). All muxer actions happen in this one thread.
 
-Audio die niet in een MP4 past (bijv. G.711 van een Foscam-deurbel) wordt
-alleen tijdens het schrijven van een clip naar AAC gehercodeerd. Bij 8 kHz
-mono kost dat vrijwel niets.
+Audio that does not fit in an MP4 (e.g. G.711 from a Foscam doorbell) is transcoded to AAC only
+while writing a clip. At 8 kHz mono that costs next to nothing.
 """
 
 from __future__ import annotations
@@ -25,9 +23,9 @@ import av
 
 log = logging.getLogger(__name__)
 
-# Audiocodecs die zonder hercoderen in een MP4 passen.
+# Audio codecs that fit in an MP4 without transcoding.
 MP4_AUDIO_OK = {"aac", "mp3", "opus", "alac", "flac", "ac3"}
-AAC_FRAME = 1024  # samples per AAC-frame
+AAC_FRAME = 1024  # samples per AAC frame
 
 RTSP_OPTIONS = {
     "rtsp_transport": "tcp",
@@ -39,7 +37,7 @@ RTSP_OPTIONS = {
 @dataclass(slots=True)
 class BufferedPacket:
     seq: int
-    arrival: float          # time.monotonic() bij binnenkomst
+    arrival: float          # time.monotonic() on arrival
     stream_index: int
     data: bytes
     pts: int | None
@@ -48,7 +46,7 @@ class BufferedPacket:
 
 
 class PacketRing:
-    """Ringbuffer met gecodeerde pakketten; begint altijd bij een video-keyframe."""
+    """Ring buffer of encoded packets; always starts at a video keyframe."""
 
     def __init__(self, pre_seconds: float):
         self.pre_seconds = pre_seconds
@@ -63,13 +61,13 @@ class PacketRing:
     def add(self, stream_index: int, data: bytes, pts: int | None, dts: int | None,
             is_video_key: bool, now: float) -> BufferedPacket | None:
         if not self._keyframes and not is_video_key:
-            return None  # nog geen startpunt: niets bewaren
+            return None  # no starting point yet: keep nothing
         self._seq += 1
         bp = BufferedPacket(self._seq, now, stream_index, data, pts, dts, is_video_key)
         self.packets.append(bp)
         if is_video_key:
             self._keyframes.append((now, self._seq))
-        # Oudste keyframe laten vallen zodra het volgende ook al oud genoeg is.
+        # Drop the oldest keyframe as soon as the next one is old enough too.
         cutoff = now - self.pre_seconds
         while len(self._keyframes) >= 2 and self._keyframes[1][0] <= cutoff:
             self._keyframes.popleft()
@@ -93,11 +91,10 @@ class PacketRing:
 
 
 class AudioTranscoder:
-    """Decodeert audiopakketten en schrijft ze als AAC (mono) in de clip.
+    """Decodes audio packets and writes them as AAC (mono) into the clip.
 
-    De tijdstempels lopen door vanaf het eerste pakket, in samples; bij clips
-    van maximaal een paar minuten is drift ten opzichte van het beeld te
-    verwaarlozen.
+    Timestamps continue from the first packet, in samples; for clips of at most a few minutes
+    the drift relative to the video is negligible.
     """
 
     def __init__(self, out, in_stream: av.stream.Stream):
@@ -130,21 +127,21 @@ class AudioTranscoder:
 
     def flush(self, mux: Callable) -> None:
         if self.next_pts is None:
-            return  # geen audio ontvangen; encoder nooit geopend
+            return  # no audio received; encoder never opened
         self._encode(mux, final=True)
         for pkt in self.stream.encode(None):
             mux(pkt)
 
 
 class ClipWriter:
-    """Schrijft gebufferde pakketten naar MP4 met tijdstempels vanaf 0."""
+    """Writes buffered packets to MP4 with timestamps starting at 0."""
 
     def __init__(self, path: Path, in_streams: dict[int, av.stream.Stream], video_index: int):
         self.path = path
         self.video_index = video_index
         self.out = av.open(str(path), mode="w", format="mp4",
-                           # gefragmenteerd: elk keyframe een los stuk, zodat een clip na een
-                           # crash of stroomuitval tot vlak voor dat moment afspeelbaar blijft
+                           # fragmented: every keyframe starts a fragment, so a clip stays
+                           # playable up to just before a crash or power cut
                            options={"movflags": "+frag_keyframe+empty_moov+default_base_moof"})
         self.map: dict[int, av.stream.Stream] = {}
         self.tb: dict[int, object] = {}
@@ -171,19 +168,19 @@ class ClipWriter:
             return
         if self.base_seconds is None:
             if not (bp.stream_index == self.video_index and bp.is_keyframe):
-                return  # eerste pakket moet een video-keyframe zijn
+                return  # the first packet must be a video keyframe
             self.base_seconds = float(dts * tb)
         offset = int(round(self.base_seconds / tb))
         pts -= offset
         dts -= offset
         if dts < 0 or pts < 0:
-            return  # audio van vóór het eerste keyframe
+            return  # audio from before the first keyframe
         transcoder = self.transcode.get(bp.stream_index)
         if transcoder is not None:
             try:
                 transcoder.write(bp.data, float(pts * tb), self.out.mux)
             except av.FFmpegError as exc:
-                log.warning("Audio hercoderen mislukt in %s (%s); rest zonder audio", self.path, exc)
+                log.warning("Audio transcoding failed in %s (%s); rest without audio", self.path, exc)
                 del self.transcode[bp.stream_index]
                 del self.tb[bp.stream_index]
             return
@@ -206,13 +203,13 @@ class ClipWriter:
         self.last_arrival = bp.arrival
 
     def close(self) -> float:
-        """Sluit het bestand; geeft de duur in seconden terug."""
+        """Closes the file; returns the duration in seconds."""
         try:
             for transcoder in self.transcode.values():
                 transcoder.flush(self.out.mux)
             self.out.close()
-        except Exception:  # noqa: BLE001 - een kapotte clip mag de service niet stoppen
-            log.exception("Clip %s kon niet netjes worden afgesloten", self.path)
+        except Exception:  # noqa: BLE001 - a broken clip must not stop the service
+            log.exception("Clip %s could not be closed cleanly", self.path)
         if self.first_arrival is None or self.last_arrival is None:
             return 0.0
         return self.last_arrival - self.first_arrival
@@ -222,7 +219,7 @@ ClipDone = Callable[[str, Path, float], None]  # (event_id, part_path, duration)
 
 
 class MainRecorder(threading.Thread):
-    """Leest de main-stream, buffert en schrijft clips op verzoek."""
+    """Reads the main stream, buffers and writes clips on request."""
 
     def __init__(self, name: str, url_getter: Callable[[], str], pre_seconds: float,
                  record_audio: bool, part_dir: Path, on_clip_done: ClipDone,
@@ -237,7 +234,7 @@ class MainRecorder(threading.Thread):
         self.on_online = on_online or (lambda _ok: None)
         self._stop_evt = threading.Event()
         self._lock = threading.Lock()
-        self._want_event: str | None = None   # event-id dat moet lopen
+        self._want_event: str | None = None   # event id that should be recording
         self._writer: ClipWriter | None = None
         self._writer_event: str | None = None
         self.online = False
@@ -246,7 +243,7 @@ class MainRecorder(threading.Thread):
         self._video_index: int | None = None
         self._extradata: bytes | None = None
 
-    # --- aangeroepen vanuit andere threads -------------------------------
+    # --- called from other threads --------------------------------------
     def start_event(self, event_id: str) -> None:
         with self._lock:
             self._want_event = event_id
@@ -266,7 +263,7 @@ class MainRecorder(threading.Thread):
                 self._read_loop()
                 backoff = 2.0
             except Exception as exc:  # noqa: BLE001
-                log.warning("[%s] main-stream fout: %s", self.cam_name, exc)
+                log.warning("[%s] main stream error: %s", self.cam_name, exc)
             self._set_online(False)
             self._finish_writer()
             self.ring.clear()
@@ -275,15 +272,15 @@ class MainRecorder(threading.Thread):
             backoff = min(backoff * 2, 60.0)
 
     def grab_frame(self):
-        """Huidig beeld van de main-stream als BGR-array, of None.
+        """Current main-stream frame as a BGR array, or None.
 
-        Decodeert op verzoek de video vanaf het laatste keyframe in de buffer tot nu (in
-        de thread van de aanroeper, met een eigen decoder). Kost bij 4K een fractie van
-        een seconde CPU, dus alleen gebruiken voor losse beelden zoals gezichtsherkenning.
+        Decodes the video from the last keyframe in the buffer up to now on request (in the
+        caller's thread, with its own decoder). Costs a fraction of a second of CPU at 4K, so
+        only use it for single frames such as face recognition.
         """
         if not self.online or self._video_index is None:
             return None
-        for _ in range(3):   # de reader-thread kan de buffer net aanpassen
+        for _ in range(3):   # the reader thread may just be changing the buffer
             try:
                 packets = list(self.ring.packets)
                 break
@@ -307,13 +304,13 @@ class MainRecorder(threading.Thread):
             for f in ctx.decode(None):
                 frame = f
         except av.FFmpegError as exc:
-            log.debug("[%s] main-beeld decoderen mislukt: %s", self.cam_name, exc)
+            log.debug("[%s] decoding main frame failed: %s", self.cam_name, exc)
         return frame.to_ndarray(format="bgr24") if frame is not None else None
 
     def _set_online(self, ok: bool) -> None:
         if ok != self.online:
             self.online = ok
-            log.info("[%s] main-stream %s", self.cam_name, "verbonden" if ok else "offline")
+            log.info("[%s] main stream %s", self.cam_name, "connected" if ok else "offline")
             self.on_online(ok)
 
     def _read_loop(self) -> None:
@@ -325,8 +322,8 @@ class MainRecorder(threading.Thread):
                 audio = container.streams.audio[0]
                 streams[audio.index] = audio
                 if audio.codec_context.name not in MP4_AUDIO_OK:
-                    log.info("[%s] audiocodec %s past niet in MP4; wordt in clips naar AAC "
-                             "gehercodeerd", self.cam_name, audio.codec_context.name)
+                    log.info("[%s] audio codec %s does not fit in MP4; transcoded to AAC in clips",
+                             self.cam_name, audio.codec_context.name)
             self.codec = video.codec_context.name
             self._video_index = video.index
             self._extradata = video.codec_context.extradata
@@ -361,15 +358,15 @@ class MainRecorder(threading.Thread):
                 self._finish_writer()
             return
         if self._writer is not None and self._writer_event != want:
-            self._finish_writer()  # nieuw event terwijl het oude nog liep
+            self._finish_writer()  # new event while the old one was still running
         if self._writer is None:
             self.part_dir.mkdir(parents=True, exist_ok=True)
             path = self.part_dir / f"{want}.mp4.part"
             self._writer = ClipWriter(path, streams, video_index)
             self._writer_event = want
-            for old in self.ring.snapshot():   # de pre-buffer (bevat bp al)
+            for old in self.ring.snapshot():   # the pre-buffer (already contains bp)
                 self._writer.write(old)
-            log.info("[%s] opname gestart (%s, %.1fs pre-buffer)",
+            log.info("[%s] recording started (%s, %.1fs pre-buffer)",
                      self.cam_name, want, self.ring.seconds)
             return
         if bp is not None:
@@ -381,8 +378,8 @@ class MainRecorder(threading.Thread):
         writer, event_id = self._writer, self._writer_event
         self._writer, self._writer_event = None, None
         duration = writer.close()
-        log.info("[%s] opname gestopt (%s, %.1fs)", self.cam_name, event_id, duration)
+        log.info("[%s] recording stopped (%s, %.1fs)", self.cam_name, event_id, duration)
         try:
             self.on_clip_done(event_id, writer.path, duration)
         except Exception:  # noqa: BLE001
-            log.exception("[%s] verwerken van clip mislukt", self.cam_name)
+            log.exception("[%s] processing the clip failed", self.cam_name)

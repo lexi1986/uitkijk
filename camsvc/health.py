@@ -1,7 +1,8 @@
-"""Gezondheid van de server zelf: CPU, geheugen, schijf en of de vorige keer netjes stopte.
+"""Health of the server itself: CPU, memory, disk and whether the previous run stopped cleanly.
 
-Geheugen komt uit de cgroup van de service (systemd: MemoryMax), zodat het percentage zegt hoe
-dicht we bij een OOM-kill zitten. Buiten systemd valt het terug op het RSS van het proces.
+Memory comes from the service's cgroup (systemd: MemoryMax; Docker: the container limit), so the
+percentage tells how close we are to an OOM kill. Outside a cgroup it falls back to the RSS of the
+process.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-CRASH_MARKER = "draait"     # bestaat zolang de service draait; blijft staan na een crash/OOM-kill
+CRASH_MARKER = "running"     # exists while the service runs; stays behind after a crash/OOM kill
 
 
 def _read(path: Path) -> str | None:
@@ -38,7 +39,7 @@ class Health:
         self.clips_dir = clips_dir
         self.started = datetime.now().astimezone()
         self._marker = state_dir / CRASH_MARKER
-        # bestond de marker al, dan is de vorige keer niet netjes gestopt
+        # if the marker already existed, the previous run did not stop cleanly
         self.previous_crash = self._marker.exists()
         self._marker.write_text(self.started.isoformat(timespec="seconds"))
         self._cgroup = _cgroup_dir()
@@ -61,7 +62,7 @@ class Health:
         return round(100 * (cpu - cpu_then) / (now - then) / (os.cpu_count() or 1), 1)
 
     def _memory(self) -> tuple[float, float | None]:
-        """(MB in gebruik, % van de limiet of None)."""
+        """(MB in use, % of the limit or None)."""
         if self._cgroup is not None:
             cur = _read(self._cgroup / "memory.current")
             limit = _read(self._cgroup / "memory.max")
@@ -86,13 +87,13 @@ class Health:
         mb, pct = self._memory()
         disk = shutil.disk_usage(self.clips_dir)
         return {
-            "gestart": self.started.isoformat(timespec="seconds"),
+            "started": self.started.isoformat(timespec="seconds"),
             "cpu": self._cpu_percent(),
-            "geheugen": pct,
-            "geheugen_mb": mb,
-            "schijf": round(100 * disk.used / disk.total, 1),
-            "schijf_vrij_gb": round(disk.free / 1e9, 1),
+            "memory": pct,
+            "memory_mb": mb,
+            "disk": round(100 * disk.used / disk.total, 1),
+            "disk_free_gb": round(disk.free / 1e9, 1),
             "ai_server": ai_state,
             "cameras_online": cameras_online,
-            "cameras_totaal": cameras_total,
+            "cameras_total": cameras_total,
         }

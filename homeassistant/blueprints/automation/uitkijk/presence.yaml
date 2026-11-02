@@ -1,0 +1,46 @@
+blueprint:
+  name: Uitkijk – pass on presence
+  description: >-
+    Passes residents arriving home and leaving on to Uitkijk. A person without a recognised face in
+    the 5 minutes after arriving then becomes "probably <name>" and does not trigger a loitering
+    alarm. The name of the person entity must match the name under Faces.
+  domain: automation
+  author: Uitkijk
+  source_url: https://github.com/lexi1986/uitkijk/blob/main/homeassistant/blueprints/automation/uitkijk/presence.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    people:
+      name: Residents
+      selector:
+        entity:
+          domain: person
+          multiple: true
+    topic_prefix:
+      name: MQTT prefix of Uitkijk
+      default: camsvc
+      selector:
+        text: {}
+
+mode: queued
+max: 10
+
+variables:
+  prefix: !input topic_prefix
+
+triggers:
+  - trigger: state
+    entity_id: !input people
+    to: home
+    id: home
+  - trigger: state
+    entity_id: !input people
+    from: home
+    not_to: ["unavailable", "unknown"]
+    id: away
+
+actions:
+  - action: mqtt.publish
+    data:
+      topic: "{{ prefix }}/server/presence"
+      payload: "{{ {'name': trigger.to_state.name, 'home': trigger.id == 'home'} | to_json }}"

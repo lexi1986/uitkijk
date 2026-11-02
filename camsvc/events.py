@@ -1,4 +1,4 @@
-"""Opgeslagen events: MP4 + JPG + JSON per event, plus de laatste N in het geheugen."""
+"""Stored events: MP4 + JPG + JSON per event, plus the last N in memory."""
 
 from __future__ import annotations
 
@@ -19,22 +19,22 @@ LAST_N = 20
 class EventRecord:
     id: str
     camera: str
-    label: str            # persoon / voertuig / dier / beweging
-    labels: list[str]     # alle labels die tijdens het event zijn gezien
+    label: str            # person / vehicle / animal / doorbell / motion
+    labels: list[str]     # all labels seen during the event
     score: float | None
-    start: str            # ISO-tijd, lokale tijdzone
+    start: str            # ISO time, local time zone
     end: str
     duration: float
-    clip: str             # pad relatief aan clips_dir
+    clip: str             # path relative to clips_dir
     snapshot: str | None
-    faces: list[dict] | None = None   # [{"crop": pad, "name": naam of None, "score": 0-1}]
-    plates: list[dict] | None = None  # [{"plate": "GKB-31-R", "name": naam of None, "crop": pad}]
-    ai: dict | None = None            # beschrijving door het lokale vision-model + status
-    zones: list[str] | None = None    # zones waarin het object stond (als er zones zijn)
-    vermoedelijk: list[str] | None = None  # net thuisgekomen volgens HA, gezicht niet herkend
-    box: list[float] | None = None    # beste detectie, [x1, y1, x2, y2] als fractie van het beeld
-    vals: str | None = None           # waarschijnlijk vals alarm: "ai" of "gebruiker"
-    extern: dict | None = None        # oordeel van de externe AI in HA (vergelijkingsweek)
+    faces: list[dict] | None = None   # [{"crop": path, "name": name or None, "score": 0-1}]
+    plates: list[dict] | None = None  # [{"plate": "GKB-31-R", "name": name or None, "crop": path}]
+    ai: dict | None = None            # description by the local vision model + status
+    zones: list[str] | None = None    # zones the object was in (if zones are set)
+    likely: list[str] | None = None   # just arrived home per HA / same clothing, face not recognised
+    box: list[float] | None = None    # best detection, [x1, y1, x2, y2] as a fraction of the frame
+    false_alarm: str | None = None    # probably a false alarm: "ai" or "user"
+    external: dict | None = None      # verdict of the external AI in HA (comparison)
 
     def urls(self, public_url: str) -> dict[str, str | None]:
         return {
@@ -51,7 +51,7 @@ class EventStore:
         self._lock = threading.Lock()
 
     def load_recent(self, camera: str) -> None:
-        """Bij opstarten de laatste events per camera inlezen uit de JSON-bestanden."""
+        """At startup, read the last events per camera from the JSON files."""
         cam_dir = self.clips_dir / camera
         records: list[EventRecord] = []
         if cam_dir.is_dir():
@@ -60,7 +60,7 @@ class EventStore:
                     try:
                         records.append(EventRecord(**json.loads(js.read_text())))
                     except Exception:  # noqa: BLE001
-                        log.warning("Kan %s niet lezen", js)
+                        log.warning("Cannot read %s", js)
                     if len(records) >= LAST_N:
                         break
                 if len(records) >= LAST_N:
@@ -81,13 +81,13 @@ class EventStore:
                     r.ai = ai
 
     def json_path(self, clip_rel: str) -> Path | None:
-        """JSON van een event bij zijn clip (<camera>/<datum>/<tijd>_<label>.mp4), binnen clips_dir."""
+        """JSON of an event for its clip (<camera>/<date>/<time>_<label>.mp4), inside clips_dir."""
         js = (self.clips_dir / clip_rel).with_suffix(".json").resolve()
         root = self.clips_dir.resolve()
         return js if root in js.parents and js.is_file() else None
 
     def update(self, js: Path, fields: dict) -> dict | None:
-        """Velden van een opgeslagen event bijwerken, op schijf en in de recente lijst."""
+        """Update fields of a stored event, on disk and in the recent list."""
         try:
             data = json.loads(js.read_text())
         except (OSError, ValueError):
@@ -104,8 +104,8 @@ class EventStore:
         return data
 
     def set_face_name(self, crop_rel: str, name: str) -> bool:
-        """Naam bij een gezichtsuitsnede (<camera>/<datum>/<tijd>_<label>.faceN.jpg) zetten,
-        in de JSON op schijf en in de recente lijst."""
+        """Set the name for a face crop (<camera>/<date>/<time>_<label>.faceN.jpg), in the JSON
+        on disk and in the recent list."""
         if ".face" not in crop_rel:
             return False
         js = self.clips_dir / (crop_rel.split(".face")[0] + ".json")
@@ -125,12 +125,12 @@ class EventStore:
         return True
 
     def recent(self, camera: str) -> list[EventRecord]:
-        """Nieuwste eerst."""
+        """Newest first."""
         with self._lock:
             return list(reversed(self._recent.get(camera, [])))
 
     def forget_missing(self) -> None:
-        """Na opruimen: events waarvan de clip weg is uit de lijst halen."""
+        """After cleanup: drop events whose clip is gone from the list."""
         with self._lock:
             for cam, dq in self._recent.items():
                 kept = [r for r in dq if (self.clips_dir / r.clip).exists()]
@@ -141,9 +141,9 @@ class EventStore:
                person: str | None = None, plate: str | None = None, q: str | None = None,
                names: dict[str, str] | None = None, day: str | None = None,
                important: bool = False) -> tuple[list[dict], int]:
-        """Alle events op schijf, nieuwste eerst, voor de webpagina. Filtert op camera en
-        label via het pad (<camera>/<datum>/<tijd>_<label>[_n].json), zodat alleen de
-        JSON-bestanden van de gevraagde pagina gelezen hoeven te worden."""
+        """All events on disk, newest first, for the web page. Filters on camera and label via
+        the path (<camera>/<date>/<time>_<label>[_n].json), so only the JSON files of the
+        requested page need to be read."""
         found: list[tuple[str, str, Path]] = []
         cams = [camera] if camera else [d.name for d in self.clips_dir.iterdir()
                                         if d.is_dir() and not d.name.startswith(".")]
@@ -160,8 +160,8 @@ class EventStore:
                     found.append((day_dir.name, js.stem, js))
         found.sort(key=lambda f: (f[0], f[1]), reverse=True)
         if person:
-            # personen staan alleen in de JSON: die dan wel allemaal lezen (hooguit enkele
-            # honderden kleine bestanden binnen de bewaartermijn)
+            # people are only in the JSON: read all of them then (at most a few hundred small
+            # files within the retention period)
             found = [f for f in found if self._has_person(f[2], person)]
         if plate:
             found = [f for f in found if self._has_plate(f[2], plate)]
@@ -175,45 +175,45 @@ class EventStore:
             try:
                 r = EventRecord(**json.loads(js.read_text()))
             except Exception:  # noqa: BLE001
-                log.warning("Kan %s niet lezen", js)
+                log.warning("Cannot read %s", js)
                 continue
             page.append(asdict(r))
         return page, len(found)
 
     @staticmethod
     def _has_person(js: Path, person: str) -> bool:
-        """person = een naam, 'onbekend' (gezicht zonder naam) of 'bekend' (iemand herkend)."""
+        """person = a name, 'unknown' (face without a name) or 'known' (someone recognised)."""
         try:
             faces = json.loads(js.read_text()).get("faces") or []
         except (OSError, ValueError):
             return False
         names = [f.get("name") for f in faces]
-        if person == "onbekend":
+        if person == "unknown":
             return bool(names) and not any(names)
-        if person == "bekend":
+        if person == "known":
             return any(names)
         return person in names
 
     @staticmethod
     def _important(js: Path, names: dict[str, str]) -> bool:
-        """Alles behalve waarschijnlijk vals alarm en de eigen auto die alleen komt of gaat
-        (voertuig met uitsluitend bekende kentekens en geen persoon)."""
+        """Everything except probable false alarms and your own car coming or going (vehicle
+        with only known plates and no person)."""
         try:
             data = json.loads(js.read_text())
         except (OSError, ValueError):
             return True
-        if data.get("vals"):
+        if data.get("false_alarm"):
             return False
         labels = set(data.get("labels") or [data.get("label")])
         plates = [p.get("plate") for p in data.get("plates") or []]
-        if labels <= {"voertuig"} and plates and all(p in names for p in plates):
+        if labels <= {"vehicle"} and plates and all(p in names for p in plates):
             return False
         return True
 
     @staticmethod
     def search_text(data: dict, names: dict[str, str]) -> str:
-        """Alles waarop gezocht kan worden: camera, labels, namen, kentekens (met en zonder
-        streepjes, plus hun naam), zones en de AI-beschrijving, -objecten en -kenmerken."""
+        """Everything that can be searched: camera, labels, names, plates (with and without
+        dashes, plus their name), zones and the AI description, objects and attributes."""
         parts = [data.get("camera", ""), " ".join(data.get("labels") or [])]
         parts += [f.get("name") or "" for f in data.get("faces") or []]
         parts += data.get("zones") or []
@@ -221,8 +221,8 @@ class EventStore:
             parts += [p.get("plate", ""), p.get("plate", "").replace("-", ""), names.get(p.get("plate"), "")]
         ai = data.get("ai") or {}
         if ai.get("status") == "ok":
-            parts += [ai.get("beschrijving", ""), " ".join(ai.get("objecten") or []),
-                      " ".join(ai.get("kenmerken") or [])]
+            parts += [ai.get("description", ""), " ".join(ai.get("objects") or []),
+                      " ".join(ai.get("attributes") or [])]
         return " ".join(parts).lower()
 
     def _matches(self, js: Path, terms: list[str], names: dict[str, str]) -> bool:
@@ -250,7 +250,7 @@ class EventStore:
 
 
 def clip_paths(clips_dir: Path, camera: str, start: datetime, label: str) -> tuple[Path, str]:
-    """Geeft (map, bestandsnaam zonder extensie) voor een nieuw event."""
+    """Returns (folder, file name without extension) for a new event."""
     day_dir = clips_dir / camera / start.strftime("%Y-%m-%d")
     day_dir.mkdir(parents=True, exist_ok=True)
     base = f"{start.strftime('%H%M%S')}_{label}"

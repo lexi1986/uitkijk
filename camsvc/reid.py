@@ -1,9 +1,9 @@
-"""Herkennen aan kleding en postuur (persoon-her-identificatie), volledig lokaal.
+"""Recognising people by clothing and build (person re-identification), fully local.
 
-Model: YouTu-ReID uit OpenCV Zoo (Apache-2.0), via onnxruntime. Is iemand ergens aan het
-gezicht herkend, dan onthouden we die dag ook hoe die persoon eruitziet (kleding, postuur).
-Een persoon zonder herkend gezicht, bijv. van achteren bij het hek, wordt daarmee vergeleken.
-Kleding wisselt per dag, dus alleen beelden van de laatste KEEP_HOURS tellen.
+Model: YouTu-ReID from OpenCV Zoo (Apache-2.0), via onnxruntime. When someone's face has been
+recognised somewhere, we remember what that person looks like that day (clothing, build). A
+person without a recognised face, e.g. seen from behind at the gate, is compared against that.
+Clothing changes daily, so only images from the last KEEP_HOURS count.
 """
 
 from __future__ import annotations
@@ -20,11 +20,11 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 MODEL_FILE = "person_reid_youtu_2021nov.onnx"
-MATCH = 0.5          # zelfde persoon, zelfde kleding: 0.5-0.85; andere personen bleven onder 0.25
-MARGIN = 0.15        # en duidelijk beter dan de op één na beste persoon
+MATCH = 0.5          # same person, same clothes: 0.5-0.85; other people stayed below 0.25
+MARGIN = 0.15        # and clearly better than the second-best person
 KEEP_HOURS = 12.0
 PER_PERSON = 20
-MIN_CROP = (40, 90)  # kleinere personen (breedte, hoogte in px) zeggen te weinig
+MIN_CROP = (40, 90)  # smaller people (width, height in px) say too little
 MEAN = np.array([0.485, 0.456, 0.406], np.float32)
 STD = np.array([0.229, 0.224, 0.225], np.float32)
 
@@ -49,7 +49,7 @@ class BodyMatcher:
         return (models_dir / MODEL_FILE).exists()
 
     def embed(self, crop: np.ndarray) -> np.ndarray | None:
-        """Kenmerkvector van een uitsnede van één persoon (BGR), of None als die te klein is."""
+        """Feature vector of a crop of one person (BGR), or None if it is too small."""
         h, w = crop.shape[:2]
         if w < MIN_CROP[0] or h < MIN_CROP[1]:
             return None
@@ -59,7 +59,7 @@ class BodyMatcher:
             v = self._session.run(None, {self._session.get_inputs()[0].name: x})[0].reshape(-1)
         return v / max(float(np.linalg.norm(v)), 1e-6)
 
-    # ------------------------------------------------------------------ onthouden
+    # ------------------------------------------------------------------ remembering
     def _load(self) -> None:
         try:
             data = json.loads(self._file.read_text())
@@ -88,7 +88,7 @@ class BodyMatcher:
             self._save()
 
     def match(self, emb: np.ndarray) -> tuple[str, float] | None:
-        """Wie van vandaag lijkt qua kleding en postuur het meest? Alleen bij een duidelijke match."""
+        """Who from today looks most alike in clothing and build? Only on a clear match."""
         with self._lock:
             self._prune()
             per = {n: max(float(e @ emb) for _, e in items) for n, items in self._seen.items()}

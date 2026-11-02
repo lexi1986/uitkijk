@@ -1,14 +1,15 @@
-"""Inloggen met passkeys (WebAuthn), zonder wachtwoorden.
+"""Log in with passkeys (WebAuthn), without passwords.
 
-- Passkeys werken alleen via HTTPS met een domeinnaam (bijv. https://camera.voorbeeld.nl
-  achter Caddy). rp_id is die domeinnaam, origin de volledige https-URL.
-- De eerste passkey koppel je met een eenmalige koppelcode (staat in het log en in
-  <state_dir>/koppelcode). Daarna voeg je ingelogd extra apparaten toe; met iCloud-sleutelhanger
-  staat een passkey van de MacBook ook meteen op de iPhone.
-- Na inloggen een ondertekende cookie (HttpOnly, Secure) die `session_days` geldig blijft.
-  "Overal uitloggen" vervangt het geheim, waarmee alle cookies vervallen.
-- Verzoeken direct vanaf de server zelf (127.0.0.1, niet via de proxy) hoeven niet in te loggen:
-  handig voor controles en scripts op de server. Caddy zet altijd X-Forwarded-For en telt dus niet.
+- Passkeys only work over HTTPS with a domain name (e.g. https://camera.example.com behind a
+  reverse proxy). rp_id is that domain name, origin the full https URL.
+- The first passkey is paired with a one-time pairing code (in the log and in
+  <state_dir>/pairing_code). After that, add more devices while logged in; with iCloud Keychain
+  a passkey created on a Mac is immediately available on the iPhone too.
+- After logging in, a signed cookie (HttpOnly, Secure) stays valid for `session_days`.
+  "Log out everywhere" replaces the secret, which invalidates all cookies.
+- Requests directly from the server itself (127.0.0.1, not via the proxy) need no login: handy
+  for checks and scripts on the server. A reverse proxy always sets X-Forwarded-For, so it does
+  not count.
 """
 
 from __future__ import annotations
@@ -32,9 +33,9 @@ from webauthn.helpers.structs import (AuthenticatorSelectionCriteria, PublicKeyC
 
 log = logging.getLogger(__name__)
 
-COOKIE = "camsvc_sessie"
+COOKIE = "camsvc_session"
 CHALLENGE_TTL = 300.0
-USER_ID = b"camera-service-huishouden"   # één gedeeld account: elk apparaat is een eigen passkey
+USER_ID = b"camera-service-huishouden"   # opaque id of the one shared account (kept for existing passkeys)
 
 
 class AuthError(Exception):
@@ -47,17 +48,17 @@ class Auth:
         self.origin = origin
         self.session_seconds = int(session_days * 86400)
         self._file = state_dir / "auth.json"
-        self._code_file = state_dir / "koppelcode"
+        self._code_file = state_dir / "pairing_code"
         self._lock = threading.Lock()
-        self._challenges: dict[str, tuple[bytes, float, str]] = {}   # id -> (challenge, tot, soort)
+        self._challenges: dict[str, tuple[bytes, float, str]] = {}   # id -> (challenge, until, kind)
         data = self._load()
         if not data.get("secret"):
             data["secret"] = secrets.token_hex(32)
             self._save(data)
         if not data.get("credentials") and not self._code_file.exists():
-            self.new_setup_code()       # bestaande code blijft geldig over herstarts heen
+            self.new_setup_code()       # an existing code stays valid across restarts
 
-    # ------------------------------------------------------------------ opslag
+    # ------------------------------------------------------------------ storage
     def _load(self) -> dict:
         try:
             return json.loads(self._file.read_text())
@@ -71,14 +72,14 @@ class Auth:
         tmp.replace(self._file)
 
     def credentials(self) -> list[dict]:
-        return [{k: c[k] for k in ("id", "naam", "aangemaakt", "laatst")}
+        return [{k: c[k] for k in ("id", "name", "created", "last_used")}
                 for c in self._load().get("credentials", [])]
 
     def new_setup_code(self) -> str:
         code = "-".join(secrets.token_hex(2).upper() for _ in range(3))
         self._code_file.write_text(code + "\n")
         self._code_file.chmod(0o600)
-        log.warning("Passkey-koppelcode: %s (eenmalig, ook in %s)", code, self._code_file)
+        log.warning("Passkey pairing code: %s (one-time, also in %s)", code, self._code_file)
         return code
 
     def _setup_code_ok(self, code: str | None) -> bool:
@@ -88,7 +89,7 @@ class Auth:
             return False
         return bool(code) and hmac.compare_digest(expected.encode(), code.strip().upper().encode())
 
-    # ------------------------------------------------------------------ sessies
+    # ------------------------------------------------------------------ sessions
     def _sign(self, payload: bytes, secret: str) -> str:
         return hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
 
@@ -108,7 +109,7 @@ class Auth:
             info = json.loads(base64.urlsafe_b64decode(payload.encode()))
         except ValueError:
             return False
-        # een verwijderde passkey logt ook dat apparaat uit
+        # a removed passkey also logs that device out
         return info.get("e", 0) > time.time() and any(
             c["id"] == info.get("c") for c in data.get("credentials", []))
 
@@ -129,17 +130,17 @@ class Auth:
     def _take_challenge(self, cid: str, kind: str) -> bytes:
         item = self._challenges.pop(cid or "", None)
         if item is None or item[1] < time.monotonic() or item[2] != kind:
-            raise AuthError("Verlopen, probeer het opnieuw")
+            raise AuthError("Expired, please try again")
         return item[0]
 
-    # ------------------------------------------------------------------ registreren
+    # ------------------------------------------------------------------ registration
     def registration_options(self, logged_in: bool, setup_code: str | None) -> dict:
         if not logged_in and not self._setup_code_ok(setup_code):
-            raise AuthError("Koppelcode klopt niet")
+            raise AuthError("Pairing code is not correct")
         existing = self._load().get("credentials", [])
         opts = generate_registration_options(
-            rp_id=self.rp_id, rp_name="Camera's", user_id=USER_ID, user_name="huishouden",
-            user_display_name="Camera's thuis",
+            rp_id=self.rp_id, rp_name="Uitkijk", user_id=USER_ID, user_name="household",
+            user_display_name="Uitkijk cameras",
             authenticator_selection=AuthenticatorSelectionCriteria(
                 resident_key=ResidentKeyRequirement.REQUIRED,
                 user_verification=UserVerificationRequirement.REQUIRED),
@@ -151,25 +152,25 @@ class Auth:
     def register(self, challenge_id: str, credential: dict, name: str, logged_in: bool,
                  setup_code: str | None) -> str:
         if not logged_in and not self._setup_code_ok(setup_code):
-            raise AuthError("Koppelcode klopt niet")
+            raise AuthError("Pairing code is not correct")
         challenge = self._take_challenge(challenge_id, "reg")
         try:
             v = verify_registration_response(credential=credential, expected_challenge=challenge,
                                              expected_rp_id=self.rp_id, expected_origin=self.origin,
                                              require_user_verification=True)
-        except Exception as exc:  # noqa: BLE001 - de bibliotheek gebruikt diverse fouttypes
-            raise AuthError(f"Passkey niet geaccepteerd: {exc}") from exc
+        except Exception as exc:  # noqa: BLE001 - the library raises various error types
+            raise AuthError(f"Passkey not accepted: {exc}") from exc
         cred_id = bytes_to_base64url(v.credential_id)
         today = time.strftime("%Y-%m-%d")
         with self._lock:
             data = self._load()
             data.setdefault("credentials", []).append({
                 "id": cred_id, "public_key": bytes_to_base64url(v.credential_public_key),
-                "sign_count": v.sign_count, "naam": (name or "Apparaat").strip()[:40],
-                "aangemaakt": today, "laatst": today})
+                "sign_count": v.sign_count, "name": (name or "Device").strip()[:40],
+                "created": today, "last_used": today})
             self._save(data)
-        self._code_file.unlink(missing_ok=True)       # koppelcode is eenmalig
-        log.info("Passkey toegevoegd: %s", name)
+        self._code_file.unlink(missing_ok=True)       # the pairing code is single-use
+        log.info("Passkey added: %s", name)
         return cred_id
 
     def remove(self, cred_id: str) -> bool:
@@ -184,7 +185,7 @@ class Auth:
             self.new_setup_code()
         return True
 
-    # ------------------------------------------------------------------ inloggen
+    # ------------------------------------------------------------------ login
     def login_options(self) -> dict:
         opts = generate_authentication_options(
             rp_id=self.rp_id, user_verification=UserVerificationRequirement.REQUIRED)
@@ -198,7 +199,7 @@ class Auth:
             data = self._load()
             stored = next((c for c in data.get("credentials", []) if c["id"] == cred_id), None)
             if stored is None:
-                raise AuthError("Onbekende passkey")
+                raise AuthError("Unknown passkey")
             try:
                 v = verify_authentication_response(
                     credential=credential, expected_challenge=challenge, expected_rp_id=self.rp_id,
@@ -206,8 +207,8 @@ class Auth:
                     credential_public_key=base64url_to_bytes(stored["public_key"]),
                     credential_current_sign_count=stored["sign_count"], require_user_verification=True)
             except Exception as exc:  # noqa: BLE001
-                raise AuthError("Inloggen mislukt") from exc
+                raise AuthError("Login failed") from exc
             stored["sign_count"] = v.new_sign_count
-            stored["laatst"] = time.strftime("%Y-%m-%d")
+            stored["last_used"] = time.strftime("%Y-%m-%d")
             self._save(data)
         return self.make_cookie(cred_id)

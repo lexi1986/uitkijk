@@ -1,5 +1,5 @@
 [Unit]
-Description=camera-service: SSH-tunnel naar Ollama op de AI-server (alleen loopback)
+Description=Uitkijk: SSH tunnel to Ollama on the AI server (loopback only)
 After=network-online.target
 Wants=network-online.target
 
@@ -7,8 +7,8 @@ Wants=network-online.target
 Type=simple
 User=aitunnel
 Group=aitunnel
-# Lokaal 127.0.0.1:11435 -> op de AI-server 127.0.0.1:11434 (Ollama). De sleutel mag daar
-# alleen naar die bestemming doorverbinden (restrict,port-forwarding,permitopen).
+# Local 127.0.0.1:11435 -> on the AI server 127.0.0.1:11434 (Ollama). The key may only forward
+# to that destination there (restrict,port-forwarding,permitopen).
 ExecStart=/usr/bin/ssh -N -T \
   -L 127.0.0.1:11435:127.0.0.1:11434 \
   -o BatchMode=yes \
@@ -19,7 +19,7 @@ ExecStart=/usr/bin/ssh -N -T \
   -o UserKnownHostsFile=/var/lib/aitunnel/.ssh/known_hosts \
   -o IdentitiesOnly=yes \
   -i /var/lib/aitunnel/.ssh/id_ed25519 \
-  gebruiker@ai-server
+  user@ai-server
 Restart=always
 RestartSec=10
 

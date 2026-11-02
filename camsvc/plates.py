@@ -1,9 +1,8 @@
-"""Kentekenherkenning, volledig lokaal: een YOLOv9-detector zoekt de plaat, een OCR-model
-leest de tekens (fast-alpr, ONNX Runtime op de CPU). Alleen Nederlandse kentekens: de
-gelezen tekst moet in een van de NL-sidecodes passen, met correctie van typische
-leesfouten (O/0, B/8, S/5, ...).
+"""Licence plate recognition, fully local: a YOLOv9 detector finds the plate, an OCR model
+reads the characters (fast-alpr, ONNX Runtime on the CPU). Dutch plates only: the text read
+must fit one of the Dutch sidecodes, with correction of typical misreads (O/0, B/8, S/5, ...).
 
-Bekende kentekens met een naam staan in <state_dir>/plates.json.
+Known plates with a name are stored in <state_dir>/plates.json.
 """
 
 from __future__ import annotations
@@ -23,11 +22,11 @@ log = logging.getLogger(__name__)
 
 DETECTOR_MODEL = "yolo-v9-t-384-license-plate-end2end"
 OCR_MODEL = "european-plates-mobile-vit-v2-model"
-MIN_PLATE_CONF = 0.5       # detector: zo zeker moet het een kentekenplaat zijn
-MIN_OCR_CONF = 0.6         # OCR: gemiddelde zekerheid per teken
-DETECT_MAX_SIDE = 1280     # uitsnede van het voertuig hooguit zo groot voor de detector
+MIN_PLATE_CONF = 0.5       # detector: this sure that it is a licence plate
+MIN_OCR_CONF = 0.6         # OCR: average confidence per character
+DETECT_MAX_SIDE = 1280     # vehicle crop at most this large for the detector
 
-# NL-sidecodes 1-14: L = letter, D = cijfer, met de streepjes zoals op de plaat.
+# Dutch sidecodes 1-14: L = letter, D = digit, with the dashes as on the plate.
 SIDECODES = ["LL-DD-DD", "DD-DD-LL", "DD-LL-DD", "LL-DD-LL", "LL-LL-DD", "DD-LL-LL",
              "DD-LLL-D", "D-LLL-DD", "LL-DDD-L", "L-DDD-LL", "LLL-DD-L", "L-DD-LLL",
              "D-LL-DDD", "DDD-LL-D"]
@@ -37,10 +36,10 @@ TO_LETTER = {"0": "O", "1": "I", "2": "Z", "5": "S", "8": "B", "6": "G", "7": "T
 
 
 def normalize_nl(text: str) -> str | None:
-    """Gelezen tekst -> NL-kenteken met streepjes (bijv. 'GKB31R' -> 'GKB-31-R'), of None.
+    """Text read -> Dutch plate with dashes (e.g. 'GKB31R' -> 'GKB-31-R'), or None.
 
-    Probeert elke sidecode; per sidecode wordt hooguit 1 teken 'verbeterd' (O->0 op een
-    cijferplek, 8->B op een letterplek, ...). De sidecode met de minste correcties wint.
+    Tries every sidecode; per sidecode at most 1 character is 'corrected' (O->0 in a digit
+    position, 8->B in a letter position, ...). The sidecode with the fewest corrections wins.
     """
     raw = re.sub(r"[^A-Z0-9]", "", text.upper())
     if len(raw) != 6:
@@ -70,9 +69,9 @@ def valid_plate(plate: str) -> bool:
 
 @dataclass
 class PlateRead:
-    plate: str            # NL-kenteken met streepjes
-    confidence: float     # gemiddelde OCR-zekerheid
-    crop_jpg: bytes       # uitsnede van de plaat
+    plate: str            # Dutch plate with dashes
+    confidence: float     # average OCR confidence
+    crop_jpg: bytes       # crop of the plate
 
 
 class PlateReader:
@@ -82,7 +81,7 @@ class PlateReader:
         self._alpr = None
         self.known: dict[str, str] = self._load()
 
-    # ------------------------------------------------------------------ bekende kentekens
+    # ------------------------------------------------------------------ known plates
     def _load(self) -> dict[str, str]:
         try:
             data = json.loads(self._file.read_text())
@@ -99,9 +98,9 @@ class PlateReader:
         plate = normalize_nl(plate) or ""
         name = name.strip()
         if not plate:
-            raise ValueError("Geen geldig Nederlands kenteken")
+            raise ValueError("Not a valid Dutch licence plate")
         if not name or len(name) > 40:
-            raise ValueError("Naam is verplicht (max. 40 tekens)")
+            raise ValueError("A name is required (max. 40 characters)")
         with self._lock:
             self.known[plate] = name
             self._save()
@@ -117,7 +116,7 @@ class PlateReader:
         return self.known.get(plate)
 
     def near_known(self, plate: str) -> str | None:
-        """Bekend kenteken dat hooguit één teken verschilt (typische leesfout, GKB/GKS)."""
+        """Known plate that differs by at most one character (typical misread, GKB/GKS)."""
         flat = plate.replace("-", "")
         for known, name in self.known.items():
             k = known.replace("-", "")
@@ -125,16 +124,15 @@ class PlateReader:
                 return name
         return None
 
-    # ------------------------------------------------------------------ lezen
+    # ------------------------------------------------------------------ reading
     def _model(self):
-        # pas bij het eerste gebruik laden: de modellen (± 15 MB) worden dan zo nodig
-        # eenmalig gedownload naar ~/.cache
+        # load on first use: the models (~15 MB) are then downloaded once to ~/.cache
         if self._alpr is None:
             import onnxruntime as ort
             from fast_alpr import ALPR
 
             def opts():
-                # 1 thread: licht, en geen affiniteitsfouten in een LXC; alleen echte fouten loggen
+                # 1 thread: light, and no affinity errors in an LXC; only log real errors
                 o = ort.SessionOptions()
                 o.intra_op_num_threads = 1
                 o.inter_op_num_threads = 1
@@ -145,19 +143,19 @@ class PlateReader:
                               detector_providers=["CPUExecutionProvider"], detector_sess_options=opts(),
                               ocr_model=OCR_MODEL, ocr_device="cpu",
                               ocr_providers=["CPUExecutionProvider"], ocr_sess_options=opts())
-            log.info("Kentekenmodellen geladen (%s, %s)", DETECTOR_MODEL, OCR_MODEL)
+            log.info("Plate models loaded (%s, %s)", DETECTOR_MODEL, OCR_MODEL)
         return self._alpr
 
     def warm_up(self) -> None:
-        """Modellen alvast laden (in een achtergrondthread bij het opstarten)."""
+        """Load the models in advance (in a background thread at startup)."""
         try:
             with self._lock:
                 self._model()
         except Exception as exc:  # noqa: BLE001
-            log.error("Kentekenmodellen laden mislukt: %s", exc)
+            log.error("Loading plate models failed: %s", exc)
 
     def read(self, bgr: np.ndarray) -> list[PlateRead]:
-        """Alle Nederlandse kentekens in een (uitgesneden) beeld."""
+        """All Dutch licence plates in a (cropped) image."""
         h, w = bgr.shape[:2]
         scale = min(1.0, DETECT_MAX_SIDE / max(h, w))
         img = cv2.resize(bgr, (int(w * scale), int(h * scale))) if scale < 1 else bgr
@@ -171,7 +169,7 @@ class PlateReader:
             conf = float(np.mean(conf)) if isinstance(conf, (list, tuple, np.ndarray)) else float(conf)
             plate = normalize_nl(r.ocr.text)
             if plate is None or conf < MIN_OCR_CONF:
-                log.debug("Kenteken genegeerd: %r (%.2f)", r.ocr.text, conf)
+                log.debug("Plate ignored: %r (%.2f)", r.ocr.text, conf)
                 continue
             b = r.detection.bounding_box
             pad = 6
@@ -182,7 +180,7 @@ class PlateReader:
 
 
 def vote(reads: list[PlateRead]) -> PlateRead | None:
-    """Meest gelezen kenteken over meerdere beelden (bij gelijkspel de zekerste lezing)."""
+    """Most frequently read plate across frames (on a tie, the most confident reading)."""
     if not reads:
         return None
     counts = Counter(r.plate for r in reads)

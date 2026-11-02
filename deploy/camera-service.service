@@ -1,5 +1,5 @@
 [Unit]
-Description=camera-service (videobuffer en detectie)
+Description=Uitkijk (video buffer and detection)
 After=network-online.target
 Wants=network-online.target
 
@@ -9,24 +9,27 @@ User=camsvc
 Group=camsvc
 SupplementaryGroups=render video
 WorkingDirectory=/opt/camera-service
-# OpenVINO schrijft telemetrie-instellingen naar $HOME: geef een beschrijfbare map
+# OpenVINO writes telemetry settings to $HOME: give it a writable folder
 Environment=HOME=/var/lib/camera-service
+# paths for the setup wizard (used when there is no config yet)
+Environment=CAMSVC_STATE=/var/lib/camera-service CAMSVC_CLIPS=/clips CAMSVC_MODEL=/opt/camera-service/models/yolo11n.onnx
 ExecStart=/opt/camera-service/.venv/bin/python -m camsvc --config /etc/camera-service/config.yaml
 Restart=always
 RestartSec=5
-# Beperkt het geheugen zodat een fout de LXC niet kan opvreten
+# Limits memory so a fault cannot eat up the whole LXC
 MemoryMax=3G
 TimeoutStopSec=30
-# nieuwe bestanden (gezichten, kleding, clips) alleen leesbaar voor de service zelf
+# new files (faces, clothing, clips) readable by the service only
 UMask=0077
 Nice=5
 
-# Afscherming
+# Hardening
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/clips /var/lib/camera-service
+# /etc/camera-service: the setup wizard writes config.yaml there
+ReadWritePaths=/clips /var/lib/camera-service /etc/camera-service
 
 [Install]
 WantedBy=multi-user.target

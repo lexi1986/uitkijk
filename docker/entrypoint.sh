@@ -1,10 +1,10 @@
 #!/bin/sh
-# Mappen die Docker als root aanmaakte overdragen aan de service, en dan als gewone gebruiker starten.
+# Hand folders that Docker created as root over to the service, then start as a normal user.
 set -e
 mkdir -p /data/state /data/models /data/go2rtc /clips
 chown camsvc:camsvc /data /data/state /data/models /data/go2rtc /clips
 [ -f /data/config.yaml ] && chown camsvc:camsvc /data/config.yaml
-# toegang tot de Intel-iGPU (/dev/dri) als die is doorgegeven
+# access to the Intel iGPU (/dev/dri) when it is passed through
 if [ -e /dev/dri/renderD128 ]; then
   gid=$(stat -c %g /dev/dri/renderD128)
   getent group "$gid" >/dev/null || groupadd -g "$gid" render-host

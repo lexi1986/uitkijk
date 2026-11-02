@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Draai dit op de Proxmox-HOST (shell van de node): maakt een Debian-LXC en installeert daarin
-# camera-service, met clipschijf (buiten de backup) en iGPU-doorgifte.
+# Run this on the Proxmox HOST (the node's shell): creates a Debian LXC and installs Uitkijk in
+# it, with a clip disk (outside the backup) and iGPU passthrough.
 #
-# Standaard wordt de code uit deze map gebruikt (kopieer de hele map naar de host):
-#   scp -r camera-service root@proxmox:/root/ && ssh root@proxmox
+# By default the code from this folder is used (copy the whole folder to the host):
+#   rsync -a ./ root@proxmox:/root/camera-service/ && ssh root@proxmox
 #   bash /root/camera-service/deploy/lxc/proxmox-create.sh
-# Of vanuit je eigen GitHub-repo, met automatische updates:
-#   REPO=gebruiker/camera-service GITHUB_TOKEN=github_pat_xxx bash proxmox-create.sh
+# Or from a GitHub repo, with automatic updates:
+#   REPO=lexi1986/uitkijk bash proxmox-create.sh
 #
-# Optionele variabelen: CTID, CT_NAME, STORAGE (rootfs, standaard local-lvm), CLIPS_STORAGE
-# (standaard = STORAGE), CLIPS_GB (32), TEMPLATE_STORAGE (local), BRIDGE (vmbr0),
-# IP (dhcp of 192.168.1.50/24), GW, VLAN, CORES (2), MEMORY (1024), DISK (8),
-# GPU (1 = /dev/dri/renderD128 doorgeven, 0 = niet), EXPORT_MODEL (1 = YOLO11n meteen maken),
-# CORAL (1 = Google Coral USB doorgeven en het model ervoor maken).
+# Optional variables: CTID, CT_NAME, STORAGE (rootfs, default local-lvm), CLIPS_STORAGE
+# (default = STORAGE), CLIPS_GB (32), TEMPLATE_STORAGE (local), BRIDGE (vmbr0),
+# IP (dhcp or 192.168.1.50/24), GW, VLAN, CORES (2), MEMORY (4096), DISK (8),
+# GPU (1 = pass /dev/dri/renderD128 through, 0 = not), EXPORT_MODEL (1 = build YOLO11n right away),
+# CORAL (1 = pass a Google Coral USB through and build the model for it).
 set -euo pipefail
 
 REPO="${REPO:-}"
@@ -35,20 +35,20 @@ CORAL="${CORAL:-0}"
 EXPORT_MODEL="${EXPORT_MODEL:-1}"
 RENDER_NODE=/dev/dri/renderD128
 
-command -v pct >/dev/null || { echo "Dit script moet op een Proxmox-host draaien." >&2; exit 1; }
+command -v pct >/dev/null || { echo "This script must run on a Proxmox host." >&2; exit 1; }
 
 NET="name=eth0,bridge=${BRIDGE},ip=${IP}"
 [ "$IP" != dhcp ] && [ -n "${GW:-}" ] && NET="${NET},gw=${GW}"
 [ -n "${VLAN:-}" ] && NET="${NET},tag=${VLAN}"
 
-echo "Template zoeken en zo nodig downloaden..."
+echo "Looking for the template and downloading it if needed..."
 pveam update >/dev/null
-# Debian 12: de Intel OpenCL-driver daarin ondersteunt de HD 530 (6e generatie) nog.
+# Debian 12: its Intel OpenCL driver still supports the HD 530 (6th generation).
 TEMPLATE="$(pveam available --section system | awk '/debian-12-standard/ {print $2}' | sort -V | tail -1)"
-[ -n "$TEMPLATE" ] || { echo "Geen Debian 12-template gevonden." >&2; exit 1; }
+[ -n "$TEMPLATE" ] || { echo "No Debian 12 template found." >&2; exit 1; }
 pveam list "$TEMPLATE_STORAGE" | grep -q "$TEMPLATE" || pveam download "$TEMPLATE_STORAGE" "$TEMPLATE"
 
-echo "Container ${CTID} (${CT_NAME}) maken..."
+echo "Creating container ${CTID} (${CT_NAME})..."
 pct create "$CTID" "${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE}" \
   --hostname "$CT_NAME" --unprivileged 1 --onboot 1 \
   --cores "$CORES" --memory "$MEMORY" --swap 256 \
@@ -57,7 +57,7 @@ pct create "$CTID" "${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE}" \
   --features nesting=1 --ostype debian
 pct start "$CTID"
 
-echo "Wachten op netwerk in de container..."
+echo "Waiting for the network in the container..."
 for _ in $(seq 1 30); do
   pct exec "$CTID" -- getent hosts github.com >/dev/null 2>&1 && break
   sleep 2
@@ -67,7 +67,7 @@ if [ "$GPU" = 1 ]; then
   if [ -e "$RENDER_NODE" ]; then
     RENDER_GID="$(pct exec "$CTID" -- getent group render | cut -d: -f3)"
     if [ -n "$RENDER_GID" ]; then
-      echo "iGPU doorgeven (${RENDER_NODE}, groep render = ${RENDER_GID})..."
+      echo "Passing the iGPU through (${RENDER_NODE}, group render = ${RENDER_GID})..."
       pct set "$CTID" --dev0 "${RENDER_NODE},gid=${RENDER_GID}"
       pct reboot "$CTID"
       for _ in $(seq 1 30); do
@@ -75,17 +75,17 @@ if [ "$GPU" = 1 ]; then
         sleep 2
       done
     else
-      echo "Let op: groep 'render' niet gevonden in de container; iGPU niet doorgegeven." >&2
+      echo "Note: group 'render' not found in the container; iGPU not passed through." >&2
     fi
   else
-    echo "Let op: ${RENDER_NODE} bestaat niet op deze host; iGPU niet doorgegeven." >&2
+    echo "Note: ${RENDER_NODE} does not exist on this host; iGPU not passed through." >&2
   fi
 fi
 
 if [ "$CORAL" = 1 ]; then
-  echo "Google Coral (USB) doorgeven..."
-  # De Coral krijgt na het laden van de firmware een ander USB-ID (1a6e:089a → 18d1:9302) en
-  # apparaatnummer; daarom de hele USB-bus doorgeven en beide ID's leesbaar maken.
+  echo "Passing the Google Coral (USB) through..."
+  # After loading its firmware the Coral gets another USB ID (1a6e:089a → 18d1:9302) and device
+  # number; so pass the whole USB bus through and make both IDs readable.
   cat > /etc/udev/rules.d/99-coral-edgetpu.rules <<'UDEV'
 SUBSYSTEMS=="usb", ATTRS{idVendor}=="1a6e", ATTRS{idProduct}=="089a", MODE="0666"
 SUBSYSTEMS=="usb", ATTRS{idVendor}=="18d1", ATTRS{idProduct}=="9302", MODE="0666"
@@ -104,7 +104,7 @@ LXC
 fi
 
 if [ -n "$REPO" ]; then
-  echo "Installatiescript ophalen van ${REPO} en draaien..."
+  echo "Fetching the install script from ${REPO} and running it..."
   AUTH=()
   [ -n "$TOKEN" ] && AUTH=(-H "Authorization: Bearer ${TOKEN}")
   curl -fsSL "${AUTH[@]}" "https://raw.githubusercontent.com/${REPO}/${BRANCH}/deploy/lxc/install.sh" -o /tmp/camsvc-install.sh
@@ -112,8 +112,8 @@ if [ -n "$REPO" ]; then
   rm -f /tmp/camsvc-install.sh
   pct exec "$CTID" -- env GITHUB_TOKEN="$TOKEN" REPO="$REPO" BRANCH="$BRANCH" EXPORT_MODEL="$EXPORT_MODEL" CORAL="$CORAL" bash /root/install.sh
 else
-  [ -f "$SRC/camsvc/__init__.py" ] || { echo "Geen code naast dit script gevonden ($SRC)." >&2; exit 1; }
-  echo "Code uit ${SRC} naar de container kopiëren en installeren..."
+  [ -f "$SRC/camsvc/__init__.py" ] || { echo "No code found next to this script ($SRC)." >&2; exit 1; }
+  echo "Copying the code from ${SRC} to the container and installing..."
   TARBALL="$(mktemp --suffix=.tar.gz)"
   tar -C "$SRC" --exclude=.venv --exclude=.git --exclude=models --exclude=__pycache__ \
     --exclude=.pytest_cache -czf "$TARBALL" .
@@ -124,6 +124,5 @@ else
 fi
 
 echo
-echo "Container ${CTID} is klaar. Volgende stap: de config invullen:"
-echo "  pct exec ${CTID} -- nano /etc/camera-service/config.yaml"
-echo "  pct exec ${CTID} -- systemctl restart camera-service"
+echo "Container ${CTID} is ready. Next step: open the web page on port 8080 and run the setup wizard."
+echo "  Setup code: pct exec ${CTID} -- journalctl -u camera-service | grep 'setup code'"

@@ -1,7 +1,6 @@
-"""Configuratie laden uit één YAML-bestand.
+"""Load the configuration from a single YAML file.
 
-Globale instellingen staan bovenaan; per camera kun je alles overschrijven
-wat onder `defaults` staat.
+Global settings are at the top; per camera you can override anything under `defaults`.
 """
 
 from __future__ import annotations
@@ -14,11 +13,11 @@ from typing import Any
 
 import yaml
 
-# Labels die de service kent, met de COCO-klassen die eronder vallen.
+# Labels the service knows, with the COCO classes that belong to them.
 LABEL_CLASSES: dict[str, set[int]] = {
-    "persoon": {0},                  # person
-    "voertuig": {2, 3, 5, 7},        # car, motorcycle, bus, truck
-    "dier": {14, 15, 16},            # bird, cat, dog
+    "person": {0},                   # person
+    "vehicle": {2, 3, 5, 7},         # car, motorcycle, bus, truck
+    "animal": {14, 15, 16},          # bird, cat, dog
 }
 
 DEFAULTS: dict[str, Any] = {
@@ -29,59 +28,59 @@ DEFAULTS: dict[str, Any] = {
     "motion": {
         "fps": 5,
         "width": 320,
-        "threshold": 25,          # pixelverschil (0-255) dat als beweging telt
-        "min_area": 0.004,        # minimaal deel van het beeld dat moet bewegen
-        "cooldown_seconds": 5,    # zo lang blijft 'beweging' aan na de laatste beweging
+        "threshold": 25,          # pixel difference (0-255) that counts as motion
+        "min_area": 0.004,        # minimum share of the frame that has to move
+        "cooldown_seconds": 5,    # 'motion' stays on this long after the last motion
     },
     "objects": {
         "enabled": True,
-        "max_fps": "auto",        # auto = 5 met Coral/GPU, anders 2
-        "always": False,          # ook zonder beweging naar personen kijken (CPU: 1x per seconde)
-        "loiter_seconds": 30,     # persoon (niet herkend) zo lang in beeld = rondhangen (0 = uit)
+        "max_fps": "auto",        # auto = 5 with Coral/GPU, otherwise 2
+        "always": False,          # also look for people without motion (CPU: once per second)
+        "loiter_seconds": 30,     # unrecognised person in view this long = loitering (0 = off)
         "min_score": 0.55,
-        "verify_below": 0.75,     # persoon/dier onder deze score eerst nakijken op scherp beeld (0 = uit)
-        "labels": {"persoon": True, "voertuig": True, "dier": False},
-        "min_hits": 2,            # aantal detecties binnen het venster voor een bevestiging
-        "stationary_seconds": 30, # voertuig/dier zo lang op dezelfde plek = stilstaand, geen events (0 = uit)
+        "verify_below": 0.75,     # person/animal below this score is verified on the sharp image first (0 = off)
+        "labels": {"person": True, "vehicle": True, "animal": False},
+        "min_hits": 2,            # detections within the window needed for a confirmation
+        "stationary_seconds": 30, # vehicle/animal in the same spot this long = stationary, no events (0 = off)
         "hit_window_seconds": 3,
     },
     "faces": {
-        "enabled": False,         # gezichtsherkenning bij een bevestigde persoon
-        "source": "main",         # main = scherp beeld uit de main-stream, sub = sub-stream
-        "attempts": 8,            # maximaal zoveel pogingen per event (stopt bij een zekere naam)
-        "interval_seconds": 1.0,  # minimaal zoveel tijd tussen pogingen
-        "auto_learn": True,       # zeker herkende gezichten zelf bijleren
-        "collect_unknown": True,  # onbekende gezichten verzamelen om later een naam te geven
+        "enabled": False,         # face recognition for a confirmed person
+        "source": "main",         # main = sharp main-stream image, sub = sub-stream
+        "attempts": 8,            # at most this many attempts per event (stops at a certain name)
+        "interval_seconds": 1.0,  # at least this much time between attempts
+        "auto_learn": True,       # learn confidently recognised faces automatically
+        "collect_unknown": True,  # collect unknown faces so they can be named later
     },
     "plates": {
-        "enabled": False,         # NL-kentekenherkenning bij een bewegend voertuig
-        "attempts": 4,            # maximaal zoveel beelden per event
+        "enabled": False,         # Dutch licence plate recognition for a moving vehicle
+        "attempts": 4,            # at most this many frames per event
         "interval_seconds": 1.0,
     },
-    "mask": [],                   # lijst polygonen, punten in procenten [[x, y], ...]
-    "zones": [],                  # [{"name": "Oprit", "points": [[x, y], ...]}]; leeg = hele beeld
-    "hwaccel": "auto",            # "auto", "vaapi", "qsv" of "none"
+    "mask": [],                   # list of polygons, points in percent [[x, y], ...]
+    "zones": [],                  # [{"name": "Driveway", "points": [[x, y], ...]}]; empty = whole frame
+    "hwaccel": "auto",            # "auto", "vaapi", "qsv" or "none"
 }
 
 
-# Instellingen die via de webpagina mogen veranderen: pad -> (type, min, max, omschrijving).
+# Settings that may change from the web page: path -> (type, min, max, description).
 EDITABLE: dict[str, tuple[type, float | None, float | None, str]] = {
-    "pre_seconds": (float, 3, 30, "Opname vooraf (s)"),
-    "post_seconds": (float, 5, 300, "Doorlopen na laatste detectie (s)"),
-    "max_clip_seconds": (float, 30, 1800, "Maximale cliplengte (s)"),
-    "motion.threshold": (int, 5, 100, "Pixelverschil voor beweging (0-255)"),
-    "motion.min_area": (float, 0.0005, 0.2, "Deel van het beeld dat moet bewegen"),
-    "objects.min_score": (float, 0.3, 0.95, "Minimale zekerheid objectmodel"),
-    "objects.verify_below": (float, 0, 0.95, "Twijfelgevallen nakijken onder (0 = uit)"),
-    "objects.labels.persoon": (bool, None, None, "Personen"),
-    "objects.labels.voertuig": (bool, None, None, "Voertuigen"),
-    "objects.labels.dier": (bool, None, None, "Dieren"),
-    "objects.always": (bool, None, None, "Ook zonder beweging naar personen kijken"),
-    "objects.loiter_seconds": (float, 0, 600, "Rondhangen na (s, 0 = uit)"),
-    "faces.enabled": (bool, None, None, "Gezichtsherkenning"),
-    "faces.auto_learn": (bool, None, None, "Gezichten zelf bijleren"),
-    "faces.collect_unknown": (bool, None, None, "Onbekende gezichten verzamelen"),
-    "plates.enabled": (bool, None, None, "Kentekenherkenning (NL)"),
+    "pre_seconds": (float, 3, 30, "Pre-recording (s)"),
+    "post_seconds": (float, 5, 300, "Keep recording after last detection (s)"),
+    "max_clip_seconds": (float, 30, 1800, "Maximum clip length (s)"),
+    "motion.threshold": (int, 5, 100, "Pixel difference for motion (0-255)"),
+    "motion.min_area": (float, 0.0005, 0.2, "Share of the frame that has to move"),
+    "objects.min_score": (float, 0.3, 0.95, "Minimum object model confidence"),
+    "objects.verify_below": (float, 0, 0.95, "Verify doubtful detections below (0 = off)"),
+    "objects.labels.person": (bool, None, None, "People"),
+    "objects.labels.vehicle": (bool, None, None, "Vehicles"),
+    "objects.labels.animal": (bool, None, None, "Animals"),
+    "objects.always": (bool, None, None, "Look for people without motion too"),
+    "objects.loiter_seconds": (float, 0, 600, "Loitering after (s, 0 = off)"),
+    "faces.enabled": (bool, None, None, "Face recognition"),
+    "faces.auto_learn": (bool, None, None, "Learn faces automatically"),
+    "faces.collect_unknown": (bool, None, None, "Collect unknown faces"),
+    "plates.enabled": (bool, None, None, "Licence plate recognition (NL)"),
 }
 
 
@@ -99,22 +98,22 @@ def set_path(settings: dict, path: str, value) -> None:
 
 
 def validate_settings(payload: dict) -> dict:
-    """Controleert instellingen uit de webpagina; geeft {pad: waarde} terug."""
+    """Validate settings from the web page; returns {path: value}."""
     if not isinstance(payload, dict):
-        raise ValueError("Verwacht een object met instellingen")
+        raise ValueError("Expected an object with settings")
     out = {}
     for path, value in payload.items():
         if path not in EDITABLE:
-            raise ValueError(f"Onbekende instelling '{path}'")
+            raise ValueError(f"Unknown setting '{path}'")
         kind, lo, hi, label = EDITABLE[path]
         if kind is bool:
             if not isinstance(value, bool):
-                raise ValueError(f"{label}: aan of uit")
+                raise ValueError(f"{label}: on or off")
         else:
             if isinstance(value, bool) or not isinstance(value, (int, float)):
-                raise ValueError(f"{label}: moet een getal zijn")
+                raise ValueError(f"{label}: must be a number")
             if not lo <= value <= hi:
-                raise ValueError(f"{label}: tussen {lo} en {hi}")
+                raise ValueError(f"{label}: between {lo} and {hi}")
             value = kind(value)
         out[path] = value
     return out
@@ -128,10 +127,10 @@ class CameraConfig:
     sub_url: str | None
     onvif: dict[str, Any] | None
     settings: dict[str, Any]
-    live_stream: str | None = None  # naam van de stream in go2rtc
-    live_mode: str = "mse"          # go2rtc-speler: mse, of webrtc,mse (bijv. voor H.264 Baseline op iOS)
+    live_stream: str | None = None  # name of the stream in go2rtc
+    live_mode: str = "mse"          # go2rtc player: mse, or webrtc,mse (e.g. for H.264 Baseline on iOS)
 
-    # snelle toegang tot veelgebruikte instellingen
+    # quick access to frequently used settings
     @property
     def pre_seconds(self) -> float:
         return float(self.settings["pre_seconds"])
@@ -177,10 +176,10 @@ class Config:
     mqtt: dict[str, Any]
     model: dict[str, Any]
     cameras: list[CameraConfig] = field(default_factory=list)
-    go2rtc_url: str | None = None   # live beeld op de webpagina via go2rtc (bijv. in HA)
-    summary_time: str = "22:00"     # dagoverzicht naar HA (MQTT); leeg = uit
-    ai: dict[str, Any] = field(default_factory=dict)   # beschrijvingen via lokaal vision-model
-    auth: dict[str, Any] = field(default_factory=dict)  # passkey-login: enabled, rp_id, origin, session_days
+    go2rtc_url: str | None = None   # live view on the web page via go2rtc
+    summary_time: str = "22:00"     # daily summary to HA (MQTT); empty = off
+    ai: dict[str, Any] = field(default_factory=dict)   # descriptions by a local vision model
+    auth: dict[str, Any] = field(default_factory=dict)  # passkey login: enabled, rp_id, origin, session_days
     log_level: str = "INFO"
 
 
@@ -198,39 +197,39 @@ _SLUG = re.compile(r"^[a-z0-9_]+$")
 
 
 def _load_auth(raw: dict | None) -> dict:
-    """Passkey-login; standaard uit. Aan vraagt een domeinnaam en een https-origin."""
+    """Passkey login; off by default. On requires a domain name and an https origin."""
     raw = dict(raw or {})
     out = {"enabled": bool(raw.pop("enabled", False)), "rp_id": str(raw.pop("rp_id", "")),
            "origin": str(raw.pop("origin", "")).rstrip("/"),
            "session_days": float(raw.pop("session_days", 90))}
     if raw:
-        raise ValueError(f"Onbekende auth-instelling(en): {', '.join(raw)}")
+        raise ValueError(f"Unknown auth setting(s): {', '.join(raw)}")
     if out["enabled"] and (not out["rp_id"] or not out["origin"].startswith("https://")
                            or out["origin"].split("//", 1)[1].split(":")[0] != out["rp_id"]):
-        raise ValueError("auth: rp_id moet de domeinnaam zijn en origin https://<die domeinnaam>")
+        raise ValueError("auth: rp_id must be the domain name and origin https://<that domain>")
     return out
 
 
 def _load_ai(raw: dict | None) -> dict[str, Any]:
-    """`ai:`-blok met standaardwaarden; types en bereiken worden bij het opstarten gecontroleerd."""
+    """`ai:` block with defaults; types and ranges are checked at startup."""
     from .ai_describe import DEFAULTS as AI_DEFAULTS
     ai = {**AI_DEFAULTS, **(raw or {})}
     unknown = set(ai) - set(AI_DEFAULTS)
     if unknown:
-        raise ValueError(f"ai: onbekende instelling(en) {', '.join(sorted(unknown))}")
+        raise ValueError(f"ai: unknown setting(s) {', '.join(sorted(unknown))}")
     if ai["num_gpu"] is not None and (isinstance(ai["num_gpu"], bool)
                                       or not isinstance(ai["num_gpu"], int) or ai["num_gpu"] < 1):
-        raise ValueError("ai.num_gpu moet een positief geheel getal zijn (of weglaten)")
+        raise ValueError("ai.num_gpu must be a positive integer (or left out)")
     for key, default in AI_DEFAULTS.items():
         if isinstance(default, bool):
             if not isinstance(ai[key], bool):
-                raise ValueError(f"ai.{key} moet true of false zijn")
+                raise ValueError(f"ai.{key} must be true or false")
         elif isinstance(default, (int, float)):
             if isinstance(ai[key], bool) or not isinstance(ai[key], (int, float)) or ai[key] <= 0:
-                raise ValueError(f"ai.{key} moet een positief getal zijn")
+                raise ValueError(f"ai.{key} must be a positive number")
     if not str(ai["base_url"]).startswith(("http://127.0.0.1:", "http://localhost:")):
-        # alleen via de loopback-tunnel: nooit een willekeurige of externe bestemming
-        raise ValueError("ai.base_url moet een loopback-adres zijn (de SSH-tunnel)")
+        # only through the loopback tunnel: never an arbitrary or external destination
+        raise ValueError("ai.base_url must be a loopback address (the SSH tunnel)")
     ai["labels"] = [str(x) for x in ai["labels"]]
     return ai
 
@@ -253,8 +252,8 @@ def load_config(path: str | Path) -> Config:
     }
     model = {
         "path": "/opt/camera-service/models/yolo11n.onnx",
-        "coral_path": None,  # .tflite voor de Coral; zonder Coral wordt `path` gebruikt
-        "device": "AUTO",   # AUTO = eerst GPU, anders CPU
+        "coral_path": None,  # .tflite for the Coral; without a Coral `path` is used
+        "device": "AUTO",   # AUTO = GPU first, otherwise CPU
         "input_size": 320,
         **raw.get("model", {}),
     }
@@ -283,12 +282,12 @@ def load_config(path: str | Path) -> Config:
     for cam in raw.get("cameras", []) or []:
         name = str(cam["name"])
         if not _SLUG.match(name):
-            raise ValueError(f"Cameranaam '{name}' mag alleen a-z, 0-9 en _ bevatten")
+            raise ValueError(f"Camera name '{name}' may only contain a-z, 0-9 and _")
         if name in seen:
-            raise ValueError(f"Cameranaam '{name}' staat dubbel in de config")
+            raise ValueError(f"Camera name '{name}' appears twice in the config")
         seen.add(name)
         if not cam.get("main_url") and not cam.get("onvif"):
-            raise ValueError(f"Camera '{name}': geef main_url (en sub_url) of een onvif-blok op")
+            raise ValueError(f"Camera '{name}': provide main_url (and sub_url) or an onvif block")
         overrides = {k: v for k, v in cam.items()
                      if k not in ("name", "friendly_name", "main_url", "sub_url", "onvif", "live",
                                   "live_mode")}
@@ -304,5 +303,5 @@ def load_config(path: str | Path) -> Config:
         ))
 
     if not cfg.cameras:
-        raise ValueError("Geen camera's in de config")
+        raise ValueError("No cameras in the config")
     return cfg

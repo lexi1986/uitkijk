@@ -1,0 +1,124 @@
+blueprint:
+  name: Uitkijk – person detected
+  description: >-
+    Notification with a snapshot when Uitkijk confirms a person at a camera, with the buttons
+    "Watch live" and "Recording". Optionally skip known people (taught faces) and only notify when
+    nobody is home.
+  domain: automation
+  author: Uitkijk
+  source_url: https://github.com/lexi1986/uitkijk/blob/main/homeassistant/blueprints/automation/uitkijk/person_alert.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    camera:
+      name: Camera
+      icon: mdi:cctv
+      input:
+        person_sensor:
+          name: Person sensor
+          description: binary_sensor.cam_<name>_person from Uitkijk
+          selector:
+            entity:
+              domain: binary_sensor
+              integration: mqtt
+        face_sensor:
+          name: Face sensor (optional)
+          description: sensor.cam_<name>_face; leave empty when face recognition is off
+          default: []
+          selector:
+            entity:
+              domain: sensor
+              integration: mqtt
+    notification:
+      name: Notification
+      icon: mdi:cellphone-message
+      input:
+        notify_targets:
+          name: Notification services
+          description: "E.g. notify.mobile_app_sams_iphone (Developer tools → Actions, search for notify)."
+          selector:
+            text:
+              multiple: true
+        app_url:
+          name: Address of the Uitkijk web page
+          description: E.g. https://camera.example.com or http://192.168.1.20:8080
+          selector:
+            text:
+              type: url
+        cooldown:
+          name: Cooldown
+          description: After a notification, no new one for this camera for this long.
+          default: 5
+          selector:
+            number: { min: 0, max: 60, unit_of_measurement: min }
+    conditions:
+      name: Conditions
+      icon: mdi:filter-outline
+      collapsed: true
+      input:
+        skip_known:
+          name: No notification for known people
+          default: true
+          selector:
+            boolean: {}
+        only_away:
+          name: Only when all of these people are away (optional)
+          default: []
+          selector:
+            entity:
+              domain: person
+              multiple: true
+
+mode: single
+max_exceeded: silent
+
+variables:
+  targets: !input notify_targets
+  app: !input app_url
+  face: !input face_sensor
+  skip: !input skip_known
+  cooldown_min: !input cooldown
+  residents: !input only_away
+  sensor: !input person_sensor
+  cam: "{{ sensor | replace('binary_sensor.cam_', '') | replace('_person', '') }}"
+  cam_name: "{{ state_attr(sensor, 'friendly_name') | replace(' Person', '') }}"
+
+triggers:
+  - trigger: state
+    entity_id: !input person_sensor
+    to: "on"
+
+conditions:
+  - "{{ residents | length == 0 or residents | select('is_state', 'home') | list | length == 0 }}"
+
+actions:
+  - if:
+      - "{{ face | length > 0 }}"
+    then:
+      - wait_template: "{{ states(face) not in ['none', 'unknown', 'unavailable'] }}"
+        timeout: { seconds: 3 }
+        continue_on_timeout: true
+  - variables:
+      who: "{{ states(face) if face | length > 0 and states(face) not in ['none', 'unknown', 'unavailable'] else '' }}"
+  - condition: template
+    value_template: "{{ not (skip and who) }}"
+  - repeat:
+      for_each: "{{ targets }}"
+      sequence:
+        - action: "{{ repeat.item }}"
+          data:
+            title: "{{ '👤 ' ~ who ~ ' at ' ~ cam_name if who else '📷 Person at ' ~ cam_name }}"
+            message: "{{ now().strftime('%H:%M') }}"
+            data:
+              image: "/api/camera_proxy/camera.cam_{{ cam }}_snapshot"
+              url: "{{ app }}/?live={{ cam }}"
+              group: "camera-{{ cam }}"
+              actions:
+                - action: URI
+                  title: Watch live
+                  uri: "{{ app }}/?live={{ cam }}"
+                - action: URI
+                  title: Recording
+                  uri: "{{ app }}/?camera={{ cam }}&open=latest"
+  - delay:
+      minutes: "{{ cooldown_min }}"

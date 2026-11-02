@@ -1,4 +1,4 @@
-"""AI-beschrijvingen: contract en foutpaden tegen een nep-Ollama-server (geen echte inferentie)."""
+"""AI descriptions: contract and error paths against a fake Ollama server (no real inference)."""
 
 import base64
 import json
@@ -13,13 +13,13 @@ from camsvc.ai_describe import (DEFAULTS, IR_COLOR_NOTE, AiDescriber, AiError, A
                                 false_alarm, is_grayscale, prepare_image, validate_output)
 from camsvc.config import _load_ai
 
-GOOD = {"beschrijving": "Een persoon staat bij de deur.", "objecten": ["persoon", "deur"],
-        "kenmerken": ["blauwe jas", "pakket"], "beeldkwaliteit": "goed", "onzekerheden": [],
-        "persoon_zichtbaar": True, "voertuig_zichtbaar": False, "dier_zichtbaar": False}
+GOOD = {"description": "A person is standing at the door.", "objects": ["person", "door"],
+        "attributes": ["blue jacket", "package"], "image_quality": "good", "uncertainties": [],
+        "person_visible": True, "vehicle_visible": False, "animal_visible": False}
 
 
 class FakeOllama:
-    """Antwoordt met een vooraf ingestelde reeks (status, body, headers); bewaart verzoeken."""
+    """Answers with a preset sequence (status, body, headers); stores requests."""
 
     def __init__(self):
         self.responses: list[tuple[int, object, dict]] = []
@@ -77,13 +77,13 @@ def job(event_id="e1", camera="deurbel", image=None, age=0.0, now=None):
     img = image if image is not None else np.random.default_rng(1).integers(
         0, 255, (360, 640, 3), dtype=np.uint8)
     import time
-    return AiJob(event_id, camera, "persoon", datetime.now().astimezone(),
+    return AiJob(event_id, camera, "person", datetime.now().astimezone(),
                  (now or time.monotonic()) - age, img, [])
 
 
 def color_img():
     img = np.zeros((360, 640, 3), np.uint8)
-    img[:, :, 2] = 200                                  # duidelijk rood
+    img[:, :, 2] = 200                                  # clearly red
     return img
 
 
@@ -96,31 +96,31 @@ def test_success_payload_and_parsing(fake):
     assert req["model"] == DEFAULTS["model"] and req["stream"] is False and req["format"]["required"]
     img_b64 = req["messages"][1]["images"][0]
     assert not img_b64.startswith("data:") and base64.b64decode(img_b64)[:2] == b"\xff\xd8"
-    assert "infraroodbeeld" not in req["messages"][1]["content"]   # kleurbeeld: geen IR-hint
+    assert "infrared image" not in req["messages"][1]["content"]   # colour image: no IR hint
     cam, ev, res = results[0]
     assert (cam, ev, res["status"]) == ("deurbel", "e1", "ok")
-    assert res["beschrijving"] == GOOD["beschrijving"] and res["model"] == DEFAULTS["model"]
-    assert res["prompt_versie"] and res["opgenomen"] and "duur_ms" in res
+    assert res["description"] == GOOD["description"] and res["model"] == DEFAULTS["model"]
+    assert res["prompt_version"] and res["captured"] and "duration_ms" in res
 
 
 def test_infrared_hint_and_color_flag(fake):
-    fake.chat_ok({**GOOD, "beschrijving": "Een zwarte auto onder de carport."})
+    fake.chat_ok({**GOOD, "description": "A black car under the carport."})
     d, results = make(fake)
     gray = np.full((360, 640, 3), 90, np.uint8)
     d._process(job(image=gray))
-    assert "infraroodbeeld" in fake.requests[0]["messages"][1]["content"]
+    assert "infrared image" in fake.requests[0]["messages"][1]["content"]
     res = results[0][2]
-    assert res["infrarood"] and res["kleur_onbetrouwbaar"] and IR_COLOR_NOTE in res["onzekerheden"]
+    assert res["infrared"] and res["color_unreliable"] and IR_COLOR_NOTE in res["uncertainties"]
 
 
 @pytest.mark.parametrize("bad", [
     {**GOOD, "extra": 1},
-    {**GOOD, "beeldkwaliteit": "uitstekend"},
-    {**GOOD, "persoon_zichtbaar": "ja"},
-    {**GOOD, "beschrijving": "x" * 501},
-    {**GOOD, "objecten": ["a"] * 9},
-    {k: v for k, v in GOOD.items() if k != "onzekerheden"},
-    "geen json",
+    {**GOOD, "image_quality": "uitstekend"},
+    {**GOOD, "person_visible": "ja"},
+    {**GOOD, "description": "x" * 501},
+    {**GOOD, "objects": ["a"] * 9},
+    {k: v for k, v in GOOD.items() if k != "uncertainties"},
+    "not json",
 ])
 def test_invalid_output_rejected_without_retry(fake, bad):
     fake.chat_ok(bad)
@@ -133,10 +133,10 @@ def test_truncated_answer_rejected(fake):
     fake.chat_ok(done_reason="length")
     d, results = make(fake)
     d._process(job())
-    assert results[0][2] == {**results[0][2], "status": "invalid_response", "reden": "truncated"}
+    assert results[0][2] == {**results[0][2], "status": "invalid_response", "reason": "truncated"}
 
 
-# ---------------------------------------------------------------- fouten en retries
+# ---------------------------------------------------------------- errors and retries
 def test_one_retry_on_503_then_ok(fake):
     fake.responses.append((503, {}, {}))
     fake.chat_ok()
@@ -149,8 +149,8 @@ def test_no_retry_on_missing_model(fake):
     fake.responses.append((404, {"error": "model not found"}, {}))
     d, results = make(fake)
     d._process(job())
-    assert results[0][2]["reden"] == "model_missing" and len(fake.requests) == 1
-    assert d.state == "model_missing" and not d.wants("hek", "persoon")
+    assert results[0][2]["reason"] == "model_missing" and len(fake.requests) == 1
+    assert d.state == "model_missing" and not d.wants("hek", "person")
 
 
 def test_unreachable_server_reports_unavailable():
@@ -158,7 +158,7 @@ def test_unreachable_server_reports_unavailable():
     results = []
     d = AiDescriber(cfg, lambda *a: results.append(a))
     d._process(job())
-    assert results[0][2]["status"] == "unavailable" and results[0][2]["reden"] == "connection"
+    assert results[0][2]["status"] == "unavailable" and results[0][2]["reason"] == "connection"
 
 
 def test_breaker_opens_after_failures(fake):
@@ -168,24 +168,24 @@ def test_breaker_opens_after_failures(fake):
         d._process(job(event_id=f"e{i}"))
     assert d.state == "breaker"
     d._process(job(event_id="e9"))
-    assert results[-1][2] == {**results[-1][2], "status": "unavailable", "reden": "breaker"}
-    assert len(fake.requests) == 3                      # geen nieuwe aanroep tijdens de pauze
+    assert results[-1][2] == {**results[-1][2], "status": "unavailable", "reason": "breaker"}
+    assert len(fake.requests) == 3                      # no new call during the pause
 
 
-# ---------------------------------------------------------------- wachtrij en limieten
+# ---------------------------------------------------------------- queue and limits
 def test_queue_replaces_waiting_image_per_camera(fake):
     d, results = make(fake)
     d.submit(job(event_id="oud"))
     d.submit(job(event_id="nieuw"))
-    assert results[0][1] == "oud" and results[0][2]["reden"] == "vervangen"
+    assert results[0][1] == "oud" and results[0][2]["reason"] == "replaced"
     assert list(d._pending) == ["deurbel"] and d._pending["deurbel"].event_id == "nieuw"
 
 
 def test_camera_interval_and_labels(fake):
     d, _ = make(fake, camera_interval=30)
-    assert d.wants("hek", "persoon") and not d.wants("hek", "beweging")
+    assert d.wants("hek", "person") and not d.wants("hek", "motion")
     d.submit(job(camera="hek"))
-    assert not d.wants("hek", "persoon") and d.wants("carport", "voertuig")
+    assert not d.wants("hek", "person") and d.wants("carport", "vehicle")
 
 
 def test_old_event_expires_without_call(fake):
@@ -199,10 +199,10 @@ def test_global_rate_limit_counts_starts(fake):
     import time
     deadline = time.monotonic() + 0.2
     assert d._wait_for_slot(deadline) and d._wait_for_slot(deadline)
-    assert not d._wait_for_slot(deadline)               # derde start past niet binnen de deadline
+    assert not d._wait_for_slot(deadline)               # third start does not fit within the deadline
 
 
-# ---------------------------------------------------------------- beeld en config
+# ---------------------------------------------------------------- image and config
 def test_prepare_image_masks_resizes_and_limits():
     img = np.full((2160, 3840, 3), 200, np.uint8)
     jpg, gray = prepare_image(img, [[[0, 0], [100, 0], [100, 50], [0, 50]]], 1280, 2 * 1024 * 1024,
@@ -210,7 +210,7 @@ def test_prepare_image_masks_resizes_and_limits():
     import cv2
     out = cv2.imdecode(np.frombuffer(jpg, np.uint8), cv2.IMREAD_COLOR)
     assert max(out.shape[:2]) == 1280 and gray
-    assert out[:300].mean() < 5 and out[500:].mean() > 150   # bovenste helft zwart gemaskeerd
+    assert out[:300].mean() < 5 and out[500:].mean() > 150   # top half masked black
     with pytest.raises(AiError):
         prepare_image(np.zeros((5000, 5000, 3), np.uint8), [], 1280, 2 ** 21, 20_000_000)
     with pytest.raises(AiError):
@@ -221,10 +221,10 @@ def test_crop_around_scales_box_from_substream():
     from camsvc.ai_describe import crop_around
     main = np.zeros((1440, 2560, 3), np.uint8)
     crop = crop_around(main, (300, 100, 340, 200), (360, 640))   # box in sub-stream (640x360)
-    # 4x opgeschaald: 160x400 px, x1.3 marge -> vierkant van 520 px
+    # scaled up 4x: 160x400 px, x1.3 margin -> square of 520 px
     assert crop.shape[:2] == (520, 520)
     assert crop_around(main, None, (360, 640)) is main
-    edge = crop_around(main, (0, 0, 20, 20), (360, 640))         # aan de rand: wordt afgekapt
+    edge = crop_around(main, (0, 0, 20, 20), (360, 640))         # at the edge: gets clipped
     assert edge.shape[0] <= 520 and edge.shape[1] <= 520
 
 
@@ -240,15 +240,15 @@ def test_config_defaults_off_and_loopback_only():
     with pytest.raises(ValueError):
         _load_ai({"queue_max": -1})
     with pytest.raises(ValueError):
-        _load_ai({"onbekend": 1})
+        _load_ai({"unknown": 1})
 
 
 def test_whole_sentences_cuts_broken_text():
     from camsvc.ai_describe import whole_sentences
-    assert whole_sentences("Een auto staat op de oprit. De auto is gedeeltelijk bedekt waardoor de vorm on") \
-        == "Een auto staat op de oprit."
-    assert whole_sentences("Een persoon loopt langs.") == "Een persoon loopt langs."
-    assert whole_sentences("Geen punt maar ook geen tweede zin") == "Geen punt maar ook geen tweede zin"
+    assert whole_sentences("A car is on the driveway. The car is partly covered so the shape is unc") \
+        == "A car is on the driveway."
+    assert whole_sentences("A person walks past.") == "A person walks past."
+    assert whole_sentences("No full stop and no second sentence") == "No full stop and no second sentence"
 
 
 def test_num_gpu_passed_only_when_set(fake):
@@ -264,20 +264,20 @@ def test_num_gpu_passed_only_when_set(fake):
 
 
 def test_validate_output_strips_and_keeps_contract():
-    out = validate_output(json.dumps({**GOOD, "objecten": [" persoon ", ""]}), False)
-    assert out["objecten"] == ["persoon"] and out["infrarood"] is False
+    out = validate_output(json.dumps({**GOOD, "objects": [" person ", ""]}), False)
+    assert out["objects"] == ["person"] and out["infrared"] is False
 
 
 def test_false_alarm_verdict():
-    ok = {"status": "ok", "beeldkwaliteit": "goed", "infrarood": False,
-          "persoon_zichtbaar": False, "voertuig_zichtbaar": False, "dier_zichtbaar": False}
-    assert false_alarm(["persoon"], ok)                                   # plant bij het hek
-    assert not false_alarm(["persoon"], {**ok, "persoon_zichtbaar": True})
-    assert not false_alarm(["aanbellen", "persoon"], ok)                  # aanbellen nooit vals
-    assert not false_alarm(["persoon", "voertuig"], {**ok, "voertuig_zichtbaar": True})
-    assert false_alarm(["persoon"], {**ok, "beeldkwaliteit": "onbruikbaar"})       # overdag telt het niet
-    assert not false_alarm(["persoon"], {**ok, "infrarood": True, "beeldkwaliteit": "onbruikbaar"})
-    assert not false_alarm(["persoon"], {**ok, "infrarood": True, "beeldkwaliteit": "beperkt"})
-    assert false_alarm(["persoon"], {**ok, "infrarood": True})
-    assert not false_alarm(["persoon"], {"status": "ok", "beeldkwaliteit": "goed"})  # oud resultaat
-    assert not false_alarm(["beweging"], ok) and not false_alarm(["persoon"], None)
+    ok = {"status": "ok", "image_quality": "good", "infrared": False,
+          "person_visible": False, "vehicle_visible": False, "animal_visible": False}
+    assert false_alarm(["person"], ok)                                   # plant at the gate
+    assert not false_alarm(["person"], {**ok, "person_visible": True})
+    assert not false_alarm(["doorbell", "person"], ok)                  # doorbell is never a false alarm
+    assert not false_alarm(["person", "vehicle"], {**ok, "vehicle_visible": True})
+    assert false_alarm(["person"], {**ok, "image_quality": "unusable"})       # does not count in daylight
+    assert not false_alarm(["person"], {**ok, "infrared": True, "image_quality": "unusable"})
+    assert not false_alarm(["person"], {**ok, "infrared": True, "image_quality": "limited"})
+    assert false_alarm(["person"], {**ok, "infrared": True})
+    assert not false_alarm(["person"], {"status": "ok", "image_quality": "good"})  # old result
+    assert not false_alarm(["motion"], ok) and not false_alarm(["person"], None)

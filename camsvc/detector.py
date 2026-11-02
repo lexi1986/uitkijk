@@ -1,8 +1,8 @@
-"""Objectdetectie met een YOLO-model.
+"""Object detection with a YOLO model.
 
-Standaard ONNX Runtime op de CPU (.onnx); optioneel een Google Coral (Edge TPU, .tflite)
-of OpenVINO (.xml) voor de iGPU. Werkt met YOLOv8/YOLO11-exports. De uitvoer heeft de
-vorm [1, 4 + klassen, N]. Eén gedeelde detector voor alle camera's.
+By default ONNX Runtime on the CPU (.onnx); optionally a Google Coral (Edge TPU, .tflite) or
+OpenVINO (.xml) for the iGPU. Works with YOLOv8/YOLO11 exports. The output has the shape
+[1, 4 + classes, N]. One shared detector for all cameras.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ CLASS_TO_LABEL = {cls: label for label, classes in LABEL_CLASSES.items() for cls
 class Detection:
     label: str
     score: float
-    box: tuple[int, int, int, int]   # x1, y1, x2, y2 in pixels van het invoerframe
+    box: tuple[int, int, int, int]   # x1, y1, x2, y2 in pixels of the input frame
 
 
 _OV_PROBE = r"""
@@ -45,33 +45,33 @@ c.create_infer_request().infer({0: np.zeros((1, 3, s, s), np.float32)})
 
 
 def openvino_works(model_path: str | Path, device: str, input_size: int) -> bool:
-    """Test OpenVINO op een apparaat in een apart proces. Een kapotte driver of een
-    OpenVINO-versie die niet met de CPU/container overweg kan, kan crashen (segfault);
-    dat mag de service zelf niet overkomen."""
+    """Test OpenVINO on a device in a separate process. A broken driver or an OpenVINO version
+    that cannot handle the CPU/container may crash (segfault); that must not happen to the
+    service itself."""
     try:
         r = subprocess.run([sys.executable, "-c", _OV_PROBE, str(model_path), device, str(input_size)],
                            capture_output=True, text=True, timeout=180)
     except subprocess.TimeoutExpired:
-        log.warning("OpenVINO-test op %s duurde te lang", device)
+        log.warning("OpenVINO test on %s took too long", device)
         return False
     if r.returncode == 0:
         return True
     if r.returncode == 3:
-        log.info("Geen GPU gevonden voor OpenVINO")
+        log.info("No GPU found for OpenVINO")
     else:
         detail = (r.stderr.strip().splitlines() or [f"exitcode {r.returncode}"])[-1]
-        log.warning("OpenVINO op %s niet bruikbaar (%s)", device, detail)
+        log.warning("OpenVINO on %s not usable (%s)", device, detail)
     return False
 
 
 class ObjectDetector:
-    """Laadt een YOLO-model: .onnx via ONNX Runtime (CPU), .tflite op een Coral (Edge TPU),
+    """Loads a YOLO model: .onnx via ONNX Runtime (CPU), .tflite on a Coral (Edge TPU),
     .xml via OpenVINO (GPU/CPU)."""
 
     def __init__(self, model_path: str | Path, device: str = "AUTO", input_size: int = 320):
         self.input_size = int(input_size)
         self._lock = threading.Lock()
-        self.accelerated = False   # True = model draait niet op de CPU
+        self.accelerated = False   # True = the model does not run on the CPU
         path = Path(model_path)
         if path.suffix == ".onnx":
             self._load_onnx(path)
@@ -79,7 +79,7 @@ class ObjectDetector:
             self._load_edgetpu(path)
         else:
             self._load_openvino(path, device.upper())
-        log.info("Objectmodel %s geladen via %s op %s (invoer %dpx)",
+        log.info("Object model %s loaded via %s on %s (input %dpx)",
                  path.name, self.backend, self.device, self.input_size)
 
     def _load_onnx(self, path: Path) -> None:
@@ -93,17 +93,17 @@ class ObjectDetector:
         inp = self.session.get_inputs()[0]
         self.input_name = inp.name
         if isinstance(inp.shape[2], int):
-            self.input_size = int(inp.shape[2])   # vaste grootte uit de export
+            self.input_size = int(inp.shape[2])   # fixed size from the export
         self.backend, self.device = "ONNX Runtime", "CPU"
         self._run = lambda blob: self.session.run(None, {self.input_name: blob})[0]
 
     def _load_edgetpu(self, path: Path) -> None:
-        """Model voor de Coral (Ultralytics `format=edgetpu`, int8). Zonder Coral een fout."""
+        """Model for the Coral (Ultralytics `format=edgetpu`, int8). Raises without a Coral."""
         try:
             from ai_edge_litert.interpreter import Interpreter, load_delegate
         except ImportError:
             from tflite_runtime.interpreter import Interpreter, load_delegate
-        delegate = load_delegate("libedgetpu.so.1")   # ValueError als er geen Coral is
+        delegate = load_delegate("libedgetpu.so.1")   # ValueError when there is no Coral
         interp = Interpreter(model_path=str(path), experimental_delegates=[delegate])
         interp.allocate_tensors()
         inp = interp.get_input_details()[0]
@@ -125,7 +125,7 @@ class ObjectDetector:
             y = interp.get_tensor(out["index"]).astype(np.float32)
             if out_scale:
                 y = (y - out_zero) * out_scale
-            y[:, :4] *= size     # TFLite-exports geven kaders genormaliseerd (0-1)
+            y[:, :4] *= size     # TFLite exports return normalised boxes (0-1)
             return y
 
         self.backend, self.device = "TFLite", "Edge TPU"
@@ -136,8 +136,8 @@ class ObjectDetector:
         candidates = {"AUTO": ["GPU", "CPU"], "GPU": ["GPU", "CPU"]}.get(wanted, [wanted])
         chosen = next((d for d in candidates if openvino_works(path, d, self.input_size)), None)
         if chosen is None:
-            raise RuntimeError("OpenVINO werkt op geen enkel apparaat in deze container; "
-                               "gebruik een .onnx-model (zie README)")
+            raise RuntimeError("OpenVINO does not work on any device in this container; "
+                               "use an .onnx model (see the README)")
         import openvino as ov
 
         core = ov.Core()

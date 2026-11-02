@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="nl">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -8,33 +8,33 @@
   <link rel="apple-touch-icon" href="/icon-180.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Camera's">
-  <title>Camera's</title>
+  <meta name="apple-mobile-web-app-title" content="Uitkijk">
+  <title>Uitkijk</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    /* Midnight Electric v1.0. Alle kleuren via deze tokens. */
+    /* Midnight Electric v1.0. All colours via these tokens. */
     :root {
       color-scheme: dark;
-      /* oppervlakken */
+      /* surfaces */
       --me-bg: #090e18;
       --me-surface: #131c2b;
       --me-elevated: #1d2a3d;
       --me-surface-hover: #223149;
       --me-border: #2b3a50;
       --me-border-strong: #39516c;
-      /* tekst */
+      /* text */
       --me-text: #f3f7fc;
       --me-text-secondary: #94a4ba;
       --me-text-muted: #71829b;
-      /* accenten en statussen */
+      /* accents and states */
       --me-primary: #39d8f4;
       --me-violet: #9c84ff;
       --me-success: #48e0b4;
       --me-warning: #ffbe5c;
       --me-danger: #fb7185;
-      /* afgeleide tinten (centraal, geen losse waarden in de code) */
+      /* derived tints (central, no loose values in the code) */
       --me-primary-tint: rgba(57, 216, 244, 0.07);
       --me-primary-soft: rgba(57, 216, 244, 0.13);
       --me-primary-border: rgba(57, 216, 244, 0.45);
@@ -50,7 +50,7 @@
       --me-backdrop: rgba(5, 8, 14, 0.82);
       --me-glow-subtle: 0 0 0 1px rgba(57, 216, 244, 0.10), 0 0 18px rgba(57, 216, 244, 0.075);
       --me-shadow-card: 0 6px 22px rgba(0, 0, 0, 0.12);
-      /* vorm en beweging */
+      /* shape and motion */
       --me-radius-sm: 8px;
       --me-radius-md: 12px;
       --me-radius-card: 16px;
@@ -58,7 +58,7 @@
       --me-radius-pill: 999px;
       --me-transition-fast: 140ms ease;
       --me-transition-normal: 200ms ease;
-      /* fysieke Nederlandse kentekenplaat (afbeelding van een echt object, geen UI-kleur) */
+      /* physical Dutch licence plate (depicts a real object, not a UI colour) */
       --nl-plate-bg: #f7c820;
       --nl-plate-text: #111111;
       --nl-plate-band: #003399;
@@ -69,7 +69,7 @@
     button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
     h1, h2, h3 { margin: 0; font-family: var(--me-font); font-weight: 600; letter-spacing: -.02em; }
     h1 { font-weight: 700; }
-    /* toetsenbordfocus: altijd duidelijk zichtbaar */
+    /* keyboard focus: always clearly visible */
     :is(button, a, select, input, [role="button"]):focus-visible { outline: 2px solid var(--me-primary); outline-offset: 3px; }
     .muted { color: var(--me-text-secondary); }
     .eyebrow { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--me-text-secondary); font-weight: 500; }
@@ -81,7 +81,7 @@
     .pill { display: inline-flex; align-items: center; gap: .4rem; font-size: .78rem; font-weight: 500; padding: .35rem .7rem; border-radius: var(--me-radius-pill); font-variant-numeric: tabular-nums; background: var(--me-surface); border: 1px solid var(--me-border); color: var(--me-text-secondary); white-space: nowrap; }
     .pill b { color: var(--me-text); font-weight: 600; }
 
-    /* camera-tegels */
+    /* camera tiles */
     .cams { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: .9rem; margin-bottom: 1.5rem; }
     .cam { position: relative; text-align: left; background: var(--me-surface); border: 1px solid var(--me-border); border-radius: var(--me-radius-card); box-shadow: var(--me-shadow-card); overflow: hidden; transition: background var(--me-transition-fast), border-color var(--me-transition-fast), box-shadow var(--me-transition-normal); }
     .cam:hover { background: var(--me-surface-hover); border-color: var(--me-border-strong); }
@@ -109,14 +109,14 @@
     .chip[aria-pressed="true"] { background: var(--me-primary-tint); border-color: var(--me-primary-border); color: var(--me-text); box-shadow: var(--me-glow-subtle); }
     .chip .sw { width: .5rem; height: .5rem; border-radius: 50%; }
 
-    /* zoeken */
+    /* search */
     .search { position: relative; flex: 1 1 260px; max-width: 420px; }
     .search input { width: 100%; min-height: 2.75rem; font: inherit; font-size: 16px; padding: .5rem .9rem .5rem 2.3rem; border-radius: var(--me-radius-pill); background: var(--me-surface); color: var(--me-text); border: 1px solid var(--me-border); transition: border-color var(--me-transition-fast), box-shadow var(--me-transition-normal); }
     .search input::placeholder { color: var(--me-text-secondary); }
     .search input:focus { outline: none; border-color: var(--me-primary-border); box-shadow: var(--me-glow-subtle); }
     .search svg { position: absolute; left: .85rem; top: 50%; transform: translateY(-50%); color: var(--me-text-secondary); pointer-events: none; }
 
-    /* dagoverzicht */
+    /* daily summary */
     .daypick { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
     .daypick input[type=date] { min-height: 2.25rem; font: inherit; font-size: .82rem; padding: .3rem .7rem; border-radius: var(--me-radius-pill); background: var(--me-surface); color: var(--me-text); border: 1px solid var(--me-border); color-scheme: dark; }
     .daypick input[type=date].on { border-color: var(--me-primary-border); box-shadow: var(--me-glow-subtle); }
@@ -129,7 +129,7 @@
     .stat span { font-size: .74rem; color: var(--me-text-secondary); }
     .who-row { display: flex; flex-wrap: wrap; gap: .4rem; }
 
-    /* tijdlijn */
+    /* timeline */
     .day { margin: 1.5rem 0 .75rem; display: flex; align-items: baseline; gap: .75rem; }
     .day h2 { font-size: 1.15rem; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: .75rem; }
@@ -142,11 +142,11 @@
     .ev .body { padding: .6rem .75rem .7rem; display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; }
     .ev .time { font-family: var(--me-font); font-size: 1.15rem; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
     .ev .sub { font-size: .76rem; color: var(--me-text-secondary); text-align: right; }
-    .l-persoon { background: var(--me-primary-soft) !important; color: var(--me-primary) !important; }
-    .l-voertuig { background: var(--me-violet-soft) !important; color: var(--me-violet) !important; }
-    .l-dier { background: var(--me-success-soft) !important; color: var(--me-success) !important; }
-    .l-beweging { background: var(--me-neutral-soft) !important; color: var(--me-text-secondary) !important; }
-    .l-aanbellen { background: var(--me-warning-soft) !important; color: var(--me-warning) !important; }
+    .l-person { background: var(--me-primary-soft) !important; color: var(--me-primary) !important; }
+    .l-vehicle { background: var(--me-violet-soft) !important; color: var(--me-violet) !important; }
+    .l-animal { background: var(--me-success-soft) !important; color: var(--me-success) !important; }
+    .l-motion { background: var(--me-neutral-soft) !important; color: var(--me-text-secondary) !important; }
+    .l-doorbell { background: var(--me-warning-soft) !important; color: var(--me-warning) !important; }
 
     .more { display: block; margin: 1.5rem auto 0; min-height: 2.75rem; padding: .7rem 1.4rem; border-radius: var(--me-radius-md); background: var(--me-elevated); border: 1px solid var(--me-border); color: var(--me-text); font-weight: 500; transition: background var(--me-transition-fast), border-color var(--me-transition-fast), box-shadow var(--me-transition-normal); }
     .more:hover { background: var(--me-surface-hover); }
@@ -155,7 +155,7 @@
     .banner { display: none; margin-bottom: 1rem; padding: .7rem 1rem; border-radius: var(--me-radius-md); background: var(--me-danger-soft); border: 1px solid var(--me-danger-border); color: var(--me-danger); font-size: .88rem; }
     .banner.show { display: block; }
 
-    /* speler */
+    /* player */
     dialog { padding: 0; border: 1px solid var(--me-border); border-radius: var(--me-radius-lg); background: var(--me-surface); color: var(--me-text); width: min(1200px, 100vw - 32px); max-height: calc(100dvh - 32px); overflow: hidden; }
     dialog::backdrop { background: var(--me-backdrop); backdrop-filter: blur(4px); }
     .player-head { display: flex; justify-content: space-between; align-items: center; gap: .75rem; padding: .8rem 1rem; border-bottom: 1px solid var(--me-border); }
@@ -166,7 +166,7 @@
     dialog:has(.faces:not(:empty)) video { max-height: calc(100dvh - 300px); }
     dialog:has(#pFaces:not(:empty)):has(#pPlates:not(:empty)) video { max-height: calc(100dvh - 400px); }
     dialog:has(#pAi:not(:empty)) video { max-height: calc(100dvh - 330px); }
-    /* AI-beschrijving */
+    /* AI description */
     .ai-box { padding: .8rem 1rem; border-top: 1px solid var(--me-border); display: grid; gap: .45rem; }
     .ai-box:empty { display: none; }
     .ai-head { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
@@ -187,7 +187,7 @@
     .icon-btn:hover { background: var(--me-surface-hover); color: var(--me-text); }
     svg { width: 1rem; height: 1rem; }
 
-    /* gezichten */
+    /* faces */
     .pill.link { cursor: pointer; color: var(--me-text); }
     .pill.link { transition: background var(--me-transition-fast); }
     .pill.link:hover { background: var(--me-surface-hover); }
@@ -207,7 +207,7 @@
     .plate .nm { font-size: .78rem; font-weight: 600; color: var(--me-violet); }
     .plate .btn { font-size: .72rem; padding: .25rem .6rem; }
     [hidden] { display: none !important; }
-    #beheerBody, #cmpBody { padding: 1rem; max-height: calc(100dvh - 140px); overflow: auto; }
+    #manageBody, #cmpBody { padding: 1rem; max-height: calc(100dvh - 140px); overflow: auto; }
     .people { padding: 1rem; display: grid; gap: 1rem; max-height: calc(100dvh - 140px); overflow: auto; }
     .person h3 { font-size: 1rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: .55rem; }
     .samples { display: flex; flex-wrap: wrap; gap: .5rem; }
@@ -231,7 +231,7 @@
     .link-red { font-size: .75rem; color: var(--me-text-secondary); font-weight: 500; font-family: var(--me-font); }
     .link-red:hover { color: var(--me-danger); }
 
-    /* masker */
+    /* mask */
     .tile-btns { position: absolute; top: .6rem; right: .6rem; z-index: 2; display: flex; gap: .35rem; }
     .tile-btn { width: 2rem; height: 2rem; display: grid; place-items: center; border-radius: 50%; background: var(--me-scrim-soft); border: 1px solid var(--me-border-strong); color: var(--me-text); backdrop-filter: blur(6px); }
     .tile-btn:hover { border-color: var(--me-primary); color: var(--me-primary); }
@@ -239,8 +239,8 @@
     .tile-btn.live:hover { color: var(--me-bg); border-color: var(--me-text); }
     .badges { display: flex; gap: .3rem; flex-wrap: wrap; justify-content: flex-end; }
     .badge.loiter { background: var(--me-danger-soft); color: var(--me-danger); }
-    .ev.vals .thumb { opacity: .55; }
-    .ev .thumb .badge.vals { left: auto; right: .55rem; top: .55rem; }
+    .ev.false-alarm .thumb { opacity: .55; }
+    .ev .thumb .badge.false-alarm { left: auto; right: .55rem; top: .55rem; }
     .cmp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: .6rem; margin-bottom: 1rem; }
     .cmp-row { display: grid; grid-template-columns: 6.5rem 1fr; gap: .75rem; padding: .7rem 0; border-top: 1px solid var(--me-border); }
     .cmp-row img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: .5rem; background: var(--me-bg); }
@@ -281,12 +281,12 @@
 
     .filter-toggle { display: none; }
     .filter-toggle b { color: var(--me-primary); }
-    .beheer-list { display: grid; gap: .5rem; margin-bottom: 1rem; }
-    .beheer-row { display: flex; justify-content: space-between; align-items: center; gap: .75rem; padding: .55rem 0; border-bottom: 1px solid var(--me-border); font-size: .9rem; }
-    .beheer-row span { color: var(--me-text-secondary); }
-    .beheer-row .btns { display: flex; gap: .4rem; flex-wrap: wrap; justify-content: flex-end; }
+    .manage-list { display: grid; gap: .5rem; margin-bottom: 1rem; }
+    .manage-row { display: flex; justify-content: space-between; align-items: center; gap: .75rem; padding: .55rem 0; border-bottom: 1px solid var(--me-border); font-size: .9rem; }
+    .manage-row span { color: var(--me-text-secondary); }
+    .manage-row .btns { display: flex; gap: .4rem; flex-wrap: wrap; justify-content: flex-end; }
     .chip.important[aria-pressed=true] { border-color: var(--me-primary-border); color: var(--me-text); }
-    /* aanraakschermen: alles minstens 44px (Apple HIG) */
+    /* touch screens: everything at least 44px (Apple HIG) */
     @media (pointer: coarse) {
       .chip, .btn, .pill.link, .daypick input[type=date] { min-height: 44px; }
       .tile-btn, .icon-btn { width: 44px; height: 44px; }
@@ -300,7 +300,7 @@
 
     @media (max-width: 560px) {
       header h1 { font-size: 1.55rem; }
-      /* camera's als veegbare rij, zodat de tijdlijn direct in beeld is */
+      /* cameras as a swipeable row, so the timeline is visible right away */
       .cams { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 72%; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -16px 1.25rem; padding: 0 16px; scrollbar-width: none; }
       .cams::-webkit-scrollbar { display: none; }
       .cam { scroll-snap-align: start; }
@@ -310,7 +310,7 @@
       .ev .sub { text-align: left; }
       dialog { width: 100vw; max-width: 100vw; max-height: 100dvh; height: 100dvh; border-radius: 0; border: 0; }
       .player-head h3 { font-size: .95rem; }
-      /* filters inklappen achter één knop, zodat de opnames direct in beeld zijn */
+      /* collapse the filters behind one button, so the recordings are visible right away */
       .filter-toggle { display: inline-flex; }
       .filters:not(.open) .chips { display: none; }
     }
@@ -320,37 +320,37 @@
   <div class="wrap">
     <header>
       <div>
-        <div class="eyebrow">Thuis</div>
-        <h1>Camera's</h1>
+        <div class="eyebrow">Uitkijk</div>
+        <h1>Cameras</h1>
       </div>
       <div class="stats" id="stats"></div>
     </header>
 
-    <div class="banner" id="banner">De service is niet bereikbaar. Opnieuw proberen…</div>
+    <div class="banner" id="banner">The service is not reachable. Retrying…</div>
 
     <section class="cams" id="cams" aria-label="Camera's"></section>
 
     <div class="filters">
-      <label class="search" aria-label="Zoeken in opnames">
+      <label class="search" aria-label="Search recordings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-        <input id="q" type="search" placeholder="Zoek: pakket, Sam, GKB-31-R, witte bus…" autocomplete="off" enterkeyhint="search">
+        <input id="q" type="search" placeholder="Search: package, Sam, GKB-31-R, white van…" autocomplete="off" enterkeyhint="search">
       </label>
       <div class="chips" id="camChips" role="group" aria-label="Camera"></div>
-      <div class="chips" id="labelChips" role="group" aria-label="Soort"></div>
-      <div class="chips" id="personChips" role="group" aria-label="Persoon"></div>
-      <div class="daypick" role="group" aria-label="Dag">
+      <div class="chips" id="labelChips" role="group" aria-label="Type"></div>
+      <div class="chips" id="personChips" role="group" aria-label="Person"></div>
+      <div class="daypick" role="group" aria-label="Day">
         <button class="chip filter-toggle" id="filterToggle" aria-expanded="false">Filter</button>
-        <button class="chip important" id="importantChip" aria-pressed="true" title="Verbergt 'waarschijnlijk niets' en de eigen auto die komt of gaat">Alleen belangrijk</button>
-        <button class="chip" data-day="0" aria-pressed="false">Vandaag</button>
-        <button class="chip" data-day="1" aria-pressed="false">Gisteren</button>
-        <input type="date" id="dayInput" aria-label="Kies een dag">
+        <button class="chip important" id="importantChip" aria-pressed="true" title="Hides 'probably nothing' and your own car coming or going">Important only</button>
+        <button class="chip" data-day="0" aria-pressed="false">Today</button>
+        <button class="chip" data-day="1" aria-pressed="false">Yesterday</button>
+        <input type="date" id="dayInput" aria-label="Pick a day">
       </div>
     </div>
 
     <section class="summary" id="summary" aria-live="polite"></section>
 
     <main id="timeline" aria-live="polite"></main>
-    <button class="more" id="more" hidden>Meer laden</button>
+    <button class="more" id="more" hidden>Load more</button>
   </div>
 
   <dialog id="player" aria-labelledby="pTitle">
@@ -359,7 +359,7 @@
         <h3 id="pTitle"></h3>
         <div class="muted" id="pSub"></div>
       </div>
-      <button class="icon-btn" id="pClose" aria-label="Sluiten">
+      <button class="icon-btn" id="pClose" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
@@ -369,16 +369,16 @@
     <div class="ai-box" id="pAi" aria-live="polite"></div>
     <div class="player-foot">
       <div class="btns">
-        <button class="btn" id="pPrev" title="Nieuwer (←)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>Nieuwer
+        <button class="btn" id="pPrev" title="Newer (←)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>Newer
         </button>
-        <button class="btn" id="pNext" title="Ouder (→)">Ouder
+        <button class="btn" id="pNext" title="Older (→)">Older
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
         </button>
       </div>
-      <button class="btn" id="pFalse" title="Niets aan de hand: deze plek voortaan negeren voor dit soort object">Niets aan de hand</button>
+      <button class="btn" id="pFalse" title="Nothing to worry about: ignore this spot for this kind of object from now on">Nothing to worry about</button>
       <a class="btn" id="pDownload" download>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg>Downloaden
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg>Download
       </a>
     </div>
   </dialog>
@@ -386,10 +386,10 @@
   <dialog id="peopleDlg" aria-labelledby="peopleTitle">
     <div class="player-head">
       <div>
-        <h3 id="peopleTitle">Gezichten</h3>
-        <div class="muted">Geef onbekende gezichten hieronder een naam, of kies een naam bij het gezicht in een event. Zeker herkende gezichten leert de server daarna zelf bij (gestippeld, "auto").</div>
+        <h3 id="peopleTitle">Faces</h3>
+        <div class="muted">Name unknown faces below, or pick a name for a face in an event. Faces recognised with confidence are then learned automatically by the server (dashed, "auto").</div>
       </div>
-      <button class="icon-btn" data-close aria-label="Sluiten">
+      <button class="icon-btn" data-close aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
@@ -398,25 +398,25 @@
 
   <dialog id="keysDlg" aria-labelledby="keysTitle">
     <div class="player-head">
-      <div><h3 id="keysTitle">Passkeys</h3><div class="muted">Apparaten die mogen inloggen. Met iCloud-sleutelhanger deelt je iPhone de passkey van je MacBook.</div></div>
-      <button class="icon-btn" data-dlg-close="keysDlg" aria-label="Sluiten">
+      <div><h3 id="keysTitle">Passkeys</h3><div class="muted">Devices that may log in. With iCloud Keychain your iPhone shares the passkey of your Mac.</div></div>
+      <button class="icon-btn" data-dlg-close="keysDlg" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
     <div class="people" id="keysList"></div>
     <div class="player-foot">
-      <button class="btn" id="keysLogoutAll">Overal uitloggen</button>
+      <button class="btn" id="keysLogoutAll">Log out everywhere</button>
       <div class="btns">
-        <button class="btn" id="keysLogout">Uitloggen</button>
-        <button class="btn primary" id="keysAdd">Passkey voor dit apparaat</button>
+        <button class="btn" id="keysLogout">Log out</button>
+        <button class="btn primary" id="keysAdd">Passkey for this device</button>
       </div>
     </div>
   </dialog>
 
   <dialog id="platesDlg" aria-labelledby="platesTitle">
     <div class="player-head">
-      <div><h3 id="platesTitle">Kentekens</h3><div class="muted">Geef een kenteken een naam via een event met een auto. Bekende auto's gaan alleen naar het logboek.</div></div>
-      <button class="icon-btn" data-dlg-close="platesDlg" aria-label="Sluiten">
+      <div><h3 id="platesTitle">Licence plates</h3><div class="muted">Name a licence plate from an event with a car. Known cars only go to the logbook.</div></div>
+      <button class="icon-btn" data-dlg-close="platesDlg" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
@@ -425,28 +425,28 @@
 
   <dialog id="liveDlg" aria-labelledby="liveTitle">
     <div class="player-head">
-      <div><h3 id="liveTitle">Live</h3><div class="muted">Via go2rtc, rechtstreeks van de camera.</div></div>
-      <button class="icon-btn" data-dlg-close="liveDlg" aria-label="Sluiten">
+      <div><h3 id="liveTitle">Live</h3><div class="muted">Via go2rtc, straight from the camera.</div></div>
+      <button class="icon-btn" data-dlg-close="liveDlg" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
-    <iframe class="live-frame" id="liveFrame" title="Live camerabeeld" allow="autoplay; fullscreen"></iframe>
+    <iframe class="live-frame" id="liveFrame" title="Live camera view" allow="autoplay; fullscreen"></iframe>
   </dialog>
 
-  <dialog id="beheerDlg" aria-labelledby="beheerTitle">
+  <dialog id="manageDlg" aria-labelledby="manageTitle">
     <div class="player-head">
-      <div><h3 id="beheerTitle">Beheer</h3><div class="muted">Instellingen, maskers en de server. Voor dagelijks gebruik heb je dit niet nodig.</div></div>
-      <button class="icon-btn" data-dlg-close="beheerDlg" aria-label="Sluiten">
+      <div><h3 id="manageTitle">Manage</h3><div class="muted">Settings, masks and the server. You do not need this for daily use.</div></div>
+      <button class="icon-btn" data-dlg-close="manageDlg" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
-    <div id="beheerBody"></div>
+    <div id="manageBody"></div>
   </dialog>
 
   <dialog id="cmpDlg" aria-labelledby="cmpTitle">
     <div class="player-head">
-      <div><h3 id="cmpTitle">AI-vergelijking</h3><div class="muted">Externe AI in Home Assistant (die nu de meldingen bepaalt) naast de lokale AI op je eigen server, over de laatste 7 dagen.</div></div>
-      <button class="icon-btn" data-dlg-close="cmpDlg" aria-label="Sluiten">
+      <div><h3 id="cmpTitle">AI comparison</h3><div class="muted">External AI in Home Assistant (which currently decides on notifications) next to the local AI on your own server, over the last 7 days.</div></div>
+      <button class="icon-btn" data-dlg-close="cmpDlg" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
@@ -455,29 +455,29 @@
 
   <dialog id="setDlg" aria-labelledby="setTitle">
     <div class="player-head">
-      <div><h3 id="setTitle">Instellingen</h3><div class="muted">Wijzigingen werken meteen en blijven bewaard.</div></div>
-      <button class="icon-btn" data-dlg-close="setDlg" aria-label="Sluiten">
+      <div><h3 id="setTitle">Settings</h3><div class="muted">Changes apply immediately and are kept.</div></div>
+      <button class="icon-btn" data-dlg-close="setDlg" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
     <div class="form" id="setForm"></div>
     <div class="player-foot">
-      <span class="mask-hint">Gevoeliger = kleiner percentage en lagere zekerheid.</span>
-      <div class="btns"><button class="btn primary" id="setSave">Opslaan</button></div>
+      <span class="mask-hint">More sensitive = smaller percentage and lower confidence.</span>
+      <div class="btns"><button class="btn primary" id="setSave">Save</button></div>
     </div>
   </dialog>
 
   <dialog id="maskDlg" aria-labelledby="maskTitle">
     <div class="player-head">
       <div>
-        <h3 id="maskTitle">Masker</h3>
+        <h3 id="maskTitle">Mask</h3>
         <div class="muted" id="mDesc"></div>
-        <div class="seg" role="tablist" aria-label="Wat teken je?">
-          <button role="tab" data-mmode="mask" aria-selected="true">Masker</button>
+        <div class="seg" role="tablist" aria-label="What are you drawing?">
+          <button role="tab" data-mmode="mask" aria-selected="true">Mask</button>
           <button role="tab" data-mmode="zones" aria-selected="false">Zones</button>
         </div>
       </div>
-      <button class="icon-btn" data-mask-close aria-label="Sluiten">
+      <button class="icon-btn" data-mask-close aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
@@ -487,29 +487,29 @@
       <div id="mDots"></div>
     </div>
     <div class="player-foot">
-      <span class="mask-hint" id="mHint">Klik punten om een vlak te tekenen. Klik op het eerste punt om het te sluiten.</span>
+      <span class="mask-hint" id="mHint">Click points to draw a polygon. Click the first point to close it.</span>
       <div class="btns">
-        <button class="btn" id="mUndo">Punt terug</button>
-        <button class="btn" id="mClear">Alles wissen</button>
-        <button class="btn primary" id="mSave">Opslaan</button>
+        <button class="btn" id="mUndo">Undo point</button>
+        <button class="btn" id="mClear">Clear all</button>
+        <button class="btn primary" id="mSave">Save</button>
       </div>
     </div>
   </dialog>
 
   <script>
     const LABELS = {
-      aanbellen: { name: "Aanbellen", color: "var(--me-warning)" },
-      persoon: { name: "Persoon", color: "var(--me-primary)" },
-      voertuig: { name: "Voertuig", color: "var(--me-violet)" },
-      dier: { name: "Dier", color: "var(--me-success)" },
-      beweging: { name: "Beweging", color: "var(--me-text-secondary)" },
+      doorbell: { name: "Doorbell", color: "var(--me-warning)" },
+      person: { name: "Person", color: "var(--me-primary)" },
+      vehicle: { name: "Vehicle", color: "var(--me-violet)" },
+      animal: { name: "Animal", color: "var(--me-success)" },
+      motion: { name: "Motion", color: "var(--me-text-secondary)" },
     };
     const PAGE = 60;
     const state = { camera: null, label: null, important: true, items: [], total: 0, cams: [], current: -1, faces: { enabled: false, people: {} }, plates: { enabled: false, known: {} } };
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-    // filter onthouden per apparaat (mag ontbreken)
+    // remember the filter per device (may be missing)
     try {
       const saved = JSON.parse(localStorage.getItem("camsvc-filter") || "{}");
       state.camera = saved.camera || null;
@@ -527,30 +527,30 @@
       return r.json();
     }
     const camName = (id) => state.cams.find((c) => c.name === id)?.friendly_name || id;
-    const fmtTime = (iso) => new Date(iso).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
-    const fmtTimeS = (iso) => new Date(iso).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const fmtTime = (iso) => new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    const fmtTimeS = (iso) => new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     const fmtDur = (s) => s >= 60 ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : `${Math.round(s)} s`;
     function dayLabel(d) {
       const today = new Date(); today.setHours(0, 0, 0, 0);
       const day = new Date(d); day.setHours(0, 0, 0, 0);
       const diff = Math.round((today - day) / 86400000);
-      if (diff === 0) return "Vandaag";
-      if (diff === 1) return "Gisteren";
-      const s = day.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" });
+      if (diff === 0) return "Today";
+      if (diff === 1) return "Yesterday";
+      const s = day.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
       return s.charAt(0).toUpperCase() + s.slice(1);
     }
 
-    // ---------- camera's en status ----------
-    const frames = {};   // laatst geladen beeld per camera, tegen flikkeren
+    // ---------- cameras and status ----------
+    const frames = {};   // last loaded frame per camera, against flicker
     function renderCams() {
       $("cams").innerHTML = state.cams.map((c) => {
-        const who = c.face && !["geen", "onbekend"].includes(c.face) ? `<span class="badge who">${esc(c.face)}</span>` : "";
+        const who = c.face && !["none", "unknown"].includes(c.face) ? `<span class="badge who">${esc(c.face)}</span>` : "";
         const badge = !c.online ? '<span class="badge offline">Offline</span>'
-          : `<span class="badges">${who}${c.loitering ? '<span class="badge loiter">Rondhangen</span>' : ""}${
-            c.event_active ? '<span class="badge rec">Opname</span>' : c.motion ? '<span class="badge motion">Beweging</span>' : ""}</span>`;
+          : `<span class="badges">${who}${c.loitering ? '<span class="badge loiter">Loitering</span>' : ""}${
+            c.event_active ? '<span class="badge rec">Recording</span>' : c.motion ? '<span class="badge motion">Motion</span>' : ""}</span>`;
         return `<button class="cam${state.camera === c.name ? " active" : ""}" data-cam="${esc(c.name)}" aria-pressed="${state.camera === c.name}">
           <span class="tile-btns">
-            ${c.live ? `<span class="tile-btn live" role="button" tabindex="0" data-live="${esc(c.name)}" title="Live bekijken" aria-label="${esc(c.friendly_name)} live bekijken">
+            ${c.live ? `<span class="tile-btn live" role="button" tabindex="0" data-live="${esc(c.name)}" title="Watch live" aria-label="Watch ${esc(c.friendly_name)} live">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>` : ""}
           </span>
           <div class="img" data-frame="${esc(c.name)}" ${frames[c.name] ? `style="background-image:url('${frames[c.name]}')"` : ""}></div>
@@ -560,7 +560,7 @@
       refreshFrames();
     }
     function refreshFrames() {
-      // eerst laden, dan pas wisselen: geen flikkering
+      // load first, then swap: no flicker
       document.querySelectorAll("[data-frame]").forEach((el) => {
         const url = `/api/cameras/${encodeURIComponent(el.dataset.frame)}/frame.jpg?t=${Date.now()}`;
         const img = new Image();
@@ -572,15 +572,15 @@
       $("importantChip").setAttribute("aria-pressed", String(state.important));
       const active = [state.camera, state.label, state.person, state.plate].filter(Boolean).length;
       $("filterToggle").innerHTML = `Filter${active ? ` <b>${active}</b>` : ""}`;
-      $("camChips").innerHTML = [{ name: null, friendly_name: "Alle camera's" }, ...state.cams].map((c) =>
+      $("camChips").innerHTML = [{ name: null, friendly_name: "All cameras" }, ...state.cams].map((c) =>
         `<button class="chip" data-cam="${esc(c.name ?? "")}" aria-pressed="${state.camera === c.name}">${esc(c.friendly_name)}</button>`).join("");
-      $("labelChips").innerHTML = [[null, { name: "Alles" }], ...Object.entries(LABELS)].map(([k, l]) =>
+      $("labelChips").innerHTML = [[null, { name: "All" }], ...Object.entries(LABELS)].map(([k, l]) =>
         `<button class="chip" data-label="${k ?? ""}" aria-pressed="${state.label === k}">${k ? `<span class="sw" style="background:${l.color}"></span>` : ""}${l.name}</button>`).join("");
       const people = Object.keys(state.faces.people);
       const cars = Object.entries(state.plates.known);
       $("personChips").innerHTML = (state.faces.enabled && people.length
-        ? [[null, "Iedereen"], ...people.map((n) => [n, n]), ["onbekend", "Onbekend"]].map(([k, n]) =>
-          `<button class="chip" data-person="${esc(k ?? "")}" aria-pressed="${!state.plate && state.person === k}">${k && k !== "onbekend" ? '<span class="sw" style="background:var(--me-primary)"></span>' : ""}${esc(n)}</button>`).join("")
+        ? [[null, "Everyone"], ...people.map((n) => [n, n]), ["unknown", "Unknown"]].map(([k, n]) =>
+          `<button class="chip" data-person="${esc(k ?? "")}" aria-pressed="${!state.plate && state.person === k}">${k && k !== "unknown" ? '<span class="sw" style="background:var(--me-primary)"></span>' : ""}${esc(n)}</button>`).join("")
         : "") + cars.map(([plate, name]) =>
           `<button class="chip" data-plate="${esc(plate)}" aria-pressed="${state.plate === plate}" title="${esc(plate)}"><span class="sw" style="background:var(--me-violet)"></span>${esc(name)}</button>`).join("");
     }
@@ -593,16 +593,16 @@
         if (state.camera && !cams.some((c) => c.name === state.camera)) state.camera = null;
         renderCams();
         if (first) renderChips();
-        const gb = st.storage.used_gb.toLocaleString("nl-NL", { maximumFractionDigits: 1 });
+        const gb = st.storage.used_gb.toLocaleString(undefined, { maximumFractionDigits: 1 });
         $("stats").innerHTML = `
           <span class="pill"><span class="dot ${cams.every((c) => c.online) ? "on" : "off"}"></span><b>${cams.filter((c) => c.online).length}/${cams.length}</b> online</span>
-          ${state.faces.enabled ? `<button class="pill link" id="openPeople">Gezichten <b>${Object.keys(state.faces.people).length}</b>${state.faces.unknown ? ` <span class="muted">· ${state.faces.unknown} onbekend</span>` : ""}</button>` : ""}
-          ${state.plates.enabled ? `<button class="pill link" id="openPlates">Kentekens <b>${Object.keys(state.plates.known).length}</b></button>` : ""}
-          <button class="pill link" id="openBeheer" title="Instellingen, maskers, opslag en server">Beheer${
-            st.mqtt_connected !== false && (!st.ai || ["ready", "uit"].includes(st.ai.state)) ? "" : ' <span class="dot off"></span>'}</button>`;
+          ${state.faces.enabled ? `<button class="pill link" id="openPeople">Faces <b>${Object.keys(state.faces.people).length}</b>${state.faces.unknown ? ` <span class="muted">· ${state.faces.unknown} unknown</span>` : ""}</button>` : ""}
+          ${state.plates.enabled ? `<button class="pill link" id="openPlates">Plates <b>${Object.keys(state.plates.known).length}</b></button>` : ""}
+          <button class="pill link" id="openManage" title="Settings, masks, storage and server">Manage${
+            st.mqtt_connected !== false && (!st.ai || ["ready", "off"].includes(st.ai.state)) ? "" : ' <span class="dot off"></span>'}</button>`;
         state.status = st;
         state.gb = gb;
-        if ($("beheerDlg").open) renderBeheer();
+        if ($("manageDlg").open) renderManage();
         return first;
       } catch {
         $("banner").classList.add("show");
@@ -610,7 +610,7 @@
       }
     }
 
-    // ---------- tijdlijn ----------
+    // ---------- timeline ----------
     function query(offset, limit) {
       const p = new URLSearchParams({ offset, limit });
       if (state.camera) p.set("camera", state.camera);
@@ -619,7 +619,7 @@
       if (state.plate) p.set("plate", state.plate);
       if (state.q) p.set("q", state.q);
       if (state.day) p.set("day", state.day);
-      if (state.important) p.set("belangrijk", "true");
+      if (state.important) p.set("important", "true");
       return `/api/events?${p}`;
     }
     async function loadEvents(reset = true) {
@@ -646,12 +646,12 @@
       let list = [];
       try { list = (await api("/api/auth/credentials")).credentials; } catch {}
       $("keysList").innerHTML = list.length ? list.map((c) => `
-        <div class="person"><h3><span>${esc(c.naam)} <span class="muted" style="font-size:.78rem;font-weight:500;margin-left:.35rem">sinds ${esc(c.aangemaakt)} · laatst ${esc(c.laatst)}</span></span>
-          <button class="link-red" data-key-del="${esc(c.id)}">Verwijderen</button></h3></div>`).join("")
-        : `<div class="empty"><h3>Geen passkeys</h3>Er wordt een nieuwe koppelcode gemaakt.</div>`;
+        <div class="person"><h3><span>${esc(c.name)} <span class="muted" style="font-size:.78rem;font-weight:500;margin-left:.35rem">since ${esc(c.created)} · last used ${esc(c.last_used)}</span></span>
+          <button class="link-red" data-key-del="${esc(c.id)}">Remove</button></h3></div>`).join("")
+        : `<div class="empty"><h3>No passkeys</h3>A new pairing code is being created.</div>`;
     }
     $("keysAdd").onclick = async () => {
-      const name = (prompt("Naam van dit apparaat:", /iPhone/.test(navigator.userAgent) ? "iPhone" : "MacBook") || "").trim();
+      const name = (prompt("Name of this device:", /iPhone/.test(navigator.userAgent) ? "iPhone" : "MacBook") || "").trim();
       if (!name) return;
       try {
         const { challenge_id, options: o } = await postJSON("/api/auth/register/options");
@@ -667,17 +667,17 @@
     };
     $("keysLogout").onclick = async () => { await postJSON("/api/auth/logout"); location.href = "/login"; };
     $("keysLogoutAll").onclick = async () => {
-      if (!confirm("Alle apparaten uitloggen? Je moet daarna overal opnieuw inloggen met je passkey.")) return;
+      if (!confirm("Log out all devices? You will have to log in again everywhere with your passkey.")) return;
       await postJSON("/api/auth/logout-all"); location.href = "/login";
     };
     $("keysList").addEventListener("click", async (ev) => {
       const del = ev.target.closest("[data-key-del]");
-      if (!del || !confirm("Deze passkey verwijderen? Dat apparaat kan dan niet meer inloggen.")) return;
+      if (!del || !confirm("Remove this passkey? That device will no longer be able to log in.")) return;
       await fetch(`/api/auth/credentials/${encodeURIComponent(del.dataset.keyDel)}`, { method: "DELETE" });
       renderKeys();
     });
 
-    // ---------- dag kiezen + dagoverzicht ----------
+    // ---------- day picker + daily summary ----------
     const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return isoDay(d); };
     function setDay(day) {
@@ -692,24 +692,24 @@
       if (!state.day) { el.innerHTML = ""; return; }
       let s;
       try { s = await api(`/api/summary?day=${state.day}`); } catch { el.innerHTML = ""; return; }
-      const known = Object.keys(s.personen).length;
+      const known = Object.keys(s.people).length;
       const stat = (n, label) => `<div class="stat"><b>${n}</b><span>${label}</span></div>`;
       el.innerHTML = `
         <div class="sum-stats">
-          ${stat(s.events, s.events === 1 ? "opname" : "opnames")}
-          ${stat(s.aanbellen, "aangebeld")}
-          ${stat(s.pakketten, s.pakketten === 1 ? "pakketje" : "pakketjes")}
-          ${stat(s.persoon_events, "met een persoon")}
-          ${stat(known, known === 1 ? "bekende" : "bekenden")}
-          ${stat(s.onbekende_personen, "onbekend gezicht")}
-          ${stat(s.autos.length, s.autos.length === 1 ? "auto" : "auto's")}
-          ${s.vals ? stat(s.vals, "niets aan de hand") : ""}
+          ${stat(s.events, s.events === 1 ? "recording" : "recordings")}
+          ${stat(s.doorbell, "doorbell rings")}
+          ${stat(s.packages, s.packages === 1 ? "package" : "packages")}
+          ${stat(s.person_events, "with a person")}
+          ${stat(known, known === 1 ? "known person" : "known people")}
+          ${stat(s.unknown_faces, "unknown face")}
+          ${stat(s.vehicles.length, s.vehicles.length === 1 ? "vehicle" : "vehicles")}
+          ${s.false_alarms ? stat(s.false_alarms, "nothing to worry about") : ""}
         </div>
-        ${known || s.autos.length ? `<div class="who-row">
-          ${Object.entries(s.personen).map(([n, p]) => `<span class="pill">${esc(n)} <b>${p.aantal}×</b> ${p.eerst}${p.laatst !== p.eerst ? `–${p.laatst}` : ""}</span>`).join("")}
-          ${s.autos.map((c) => `<span class="pill"><span class="plate-txt">${esc(c.plate)}</span> ${c.naam ? esc(c.naam) : "onbekend"} · ${c.eerst}</span>`).join("")}
+        ${known || s.vehicles.length ? `<div class="who-row">
+          ${Object.entries(s.people).map(([n, p]) => `<span class="pill">${esc(n)} <b>${p.count}×</b> ${p.first}${p.last !== p.first ? `–${p.last}` : ""}</span>`).join("")}
+          ${s.vehicles.map((c) => `<span class="pill"><span class="plate-txt">${esc(c.plate)}</span> ${c.name ? esc(c.name) : "unknown"} · ${c.first}</span>`).join("")}
         </div>` : ""}
-        <div class="txt">${esc(s.tekst)}${s.drukste_uur ? ` Drukste uur: ${s.drukste_uur}.` : ""}</div>`;
+        <div class="txt">${esc(s.text)}${s.busiest_hour ? ` Busiest hour: ${s.busiest_hour}.` : ""}</div>`;
     }
     document.querySelectorAll("[data-day]").forEach((b) => b.addEventListener("click", () => {
       const d = daysAgo(Number(b.dataset.day));
@@ -720,7 +720,7 @@
     function renderTimeline() {
       const tl = $("timeline");
       if (!state.items.length) {
-        tl.innerHTML = `<div class="empty"><h3>Geen opnames</h3>${state.q ? `Niets gevonden voor “${esc(state.q)}”.` : state.camera || state.label || state.person || state.plate ? "Niets gevonden met dit filter." : state.important ? "Niets belangrijks. Zet “Alleen belangrijk” uit om alles te zien." : "Er is nog niets opgenomen."}</div>`;
+        tl.innerHTML = `<div class="empty"><h3>No recordings</h3>${state.q ? `Nothing found for “${esc(state.q)}”.` : state.camera || state.label || state.person || state.plate ? "Nothing found with this filter." : state.important ? "Nothing important. Turn off “Important only” to see everything." : "Nothing has been recorded yet."}</div>`;
         $("more").hidden = true;
         return;
       }
@@ -731,14 +731,14 @@
         if (key !== lastDay) {
           if (lastDay) html += "</div>";
           const n = state.items.filter((x) => new Date(x.start).toDateString() === key).length;
-          html += `<div class="day"><h2>${dayLabel(d)}</h2><span class="eyebrow">${n} ${n === 1 ? "opname" : "opnames"}</span></div><div class="grid">`;
+          html += `<div class="day"><h2>${dayLabel(d)}</h2><span class="eyebrow">${n} ${n === 1 ? "recording" : "recordings"}</span></div><div class="grid">`;
           lastDay = key;
         }
-        const l = LABELS[e.label] || LABELS.beweging;
+        const l = LABELS[e.label] || LABELS.motion;
         const snap = e.snapshot ? `style="background-image:url('/clips/${encodeURI(e.snapshot)}')"` : "";
         const names = [knownNames(e), ...(e.plates || []).map((p) => state.plates.known[p.plate] || p.plate)].filter(Boolean).join(", ");
-        html += `<button class="ev${e.vals ? " vals" : ""}" data-i="${i}">
-          <div class="thumb" ${snap}><span class="badge l-${esc(e.label)}">${l.name}</span>${e.vals ? `<span class="badge warn vals">${e.vals === "ai" ? "Waarschijnlijk niets" : "Niets"}</span>` : ""}<span class="dur">${fmtDur(e.duration)}</span></div>
+        html += `<button class="ev${e.false_alarm ? " false-alarm" : ""}" data-i="${i}">
+          <div class="thumb" ${snap}><span class="badge l-${esc(e.label)}">${l.name}</span>${e.false_alarm ? `<span class="badge warn false-alarm">${e.false_alarm === "ai" ? "Probably nothing" : "Nothing"}</span>` : ""}<span class="dur">${fmtDur(e.duration)}</span></div>
           <div class="body"><span class="time">${fmtTime(e.start)}</span><span class="sub">${names ? `<span class="names">${esc(names)}</span> · ` : ""}${esc(camName(e.camera))}</span></div>
         </button>`;
       });
@@ -747,21 +747,21 @@
       $("more").hidden = state.items.length >= state.total;
     }
 
-    // ---------- speler ----------
+    // ---------- player ----------
     function openEvent(i) {
       const e = state.items[i];
       if (!e) return;
       state.current = i;
-      const l = LABELS[e.label] || LABELS.beweging;
+      const l = LABELS[e.label] || LABELS.motion;
       const d = new Date(e.start);
       $("pTitle").innerHTML = `${esc(camName(e.camera))} <span class="badge l-${esc(e.label)}">${l.name}</span>`;
       const others = (e.labels || []).filter((x) => x !== e.label).map((x) => LABELS[x]?.name.toLowerCase() || x);
       $("pSub").textContent = `${dayLabel(d)}, ${fmtTimeS(e.start)} · ${fmtDur(e.duration)}`
-        + (others.length ? ` · ook ${others.join(", ")}` : "")
+        + (others.length ? ` · also ${others.join(", ")}` : "")
         + (e.zones?.length ? ` · zone ${e.zones.join(", ")}` : "")
-        + (e.vermoedelijk?.length ? ` · waarschijnlijk ${e.vermoedelijk.join(", ")}` : "")
-        + (e.vals === "ai" ? " · waarschijnlijk niets: de AI zag niemand" : e.vals ? " · gemarkeerd als niets aan de hand" : "");
-      $("pFalse").textContent = e.vals ? "Toch belangrijk" : "Niets aan de hand";
+        + (e.likely?.length ? ` · probably ${e.likely.join(", ")}` : "")
+        + (e.false_alarm === "ai" ? " · probably nothing: the AI saw no one" : e.false_alarm ? " · marked as nothing to worry about" : "");
+      $("pFalse").textContent = e.false_alarm ? "Important after all" : "Nothing to worry about";
       const v = $("pVideo");
       v.poster = e.snapshot ? `/clips/${encodeURI(e.snapshot)}` : "";
       v.src = `/clips/${encodeURI(e.clip)}`;
@@ -787,7 +787,7 @@
       state.current = -1;
     }
 
-    // ---------- gezichten ----------
+    // ---------- faces ----------
     const knownNames = (e) => [...new Set((e.faces || []).map((f) => f.name).filter(Boolean))].join(", ");
     async function loadFaces() {
       try { state.faces = await api("/api/faces"); } catch {}
@@ -799,11 +799,11 @@
       el.innerHTML = e.faces.map((f, k) => `
         <div class="face${f.name ? " known" : ""}">
           <img src="/clips/${encodeURI(f.crop)}" alt="">
-          <span class="nm">${f.name ? esc(f.name) : "Onbekend"}</span>
-          <select data-face="${k}" aria-label="Wie is dit?">
-            <option value="">${f.name ? "Anders…" : "Wie is dit?"}</option>
+          <span class="nm">${f.name ? esc(f.name) : "Unknown"}</span>
+          <select data-face="${k}" aria-label="Who is this?">
+            <option value="">${f.name ? "Someone else…" : "Who is this?"}</option>
             ${names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("")}
-            <option value="__new">+ Nieuwe persoon…</option>
+            <option value="__new">+ New person…</option>
           </select>
         </div>`).join("");
     }
@@ -814,35 +814,35 @@
       const r = await fetch(`/api/faces/${encodeURIComponent(name)}`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ crop: f.crop }),
       });
-      if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Opslaan mislukt"); return; }
+      if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Saving failed"); return; }
       const data = await r.json();
       f.name = name;
       Object.assign(state.faces, data);
       renderFaces(e); renderTimeline(); loadStatus();
     }
-    const fmtDay = (iso) => new Date(iso).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
+    const fmtDay = (iso) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
     let unknownGroups = [];
     function nameOptions(selected) {
       const names = Object.keys(state.faces.people);
-      return `<option value="">Wie is dit?</option>
+      return `<option value="">Who is this?</option>
         ${names.map((n) => `<option value="${esc(n)}"${n === selected ? " selected" : ""}>${esc(n)}</option>`).join("")}
-        <option value="__new">+ Nieuwe persoon…</option>`;
+        <option value="__new">+ New person…</option>`;
     }
     function renderUnknown() {
       if (!unknownGroups.length) return "";
-      return `<h4>Onbekende gezichten</h4>
+      return `<h4>Unknown faces</h4>
         <div class="unknowns">${unknownGroups.slice(0, 40).map((g, k) => `
           <div class="ugroup">
             <div class="samples">${g.samples.map((id) => `<img src="/api/unknown-faces/${id}.jpg" alt="" loading="lazy">`).join("")}</div>
-            <div class="meta"><b>${g.count}× gezien</b> · ${g.first.slice(0, 10) === g.last.slice(0, 10) ? `${fmtDay(g.last)} ${fmtTime(g.last)}` : `${fmtDay(g.first)} – ${fmtDay(g.last)}`} · ${g.cameras.map((c) => esc(camName(c))).join(", ")}
-              ${g.suggest ? `<br><span class="hint">Lijkt op ${esc(g.suggest)}</span>` : ""}</div>
+            <div class="meta"><b>Seen ${g.count}×</b> · ${g.first.slice(0, 10) === g.last.slice(0, 10) ? `${fmtDay(g.last)} ${fmtTime(g.last)}` : `${fmtDay(g.first)} – ${fmtDay(g.last)}`} · ${g.cameras.map((c) => esc(camName(c))).join(", ")}
+              ${g.suggest ? `<br><span class="hint">Looks like ${esc(g.suggest)}</span>` : ""}</div>
             <div class="row">
-              <select data-ugroup="${k}" aria-label="Wie is dit?">${nameOptions(g.suggest)}</select>
-              <button class="btn primary" data-uassign="${k}">Opslaan</button>
-              <button class="btn" data-udismiss="${k}" title="Niet bewaren">Negeren</button>
+              <select data-ugroup="${k}" aria-label="Who is this?">${nameOptions(g.suggest)}</select>
+              <button class="btn primary" data-uassign="${k}">Save</button>
+              <button class="btn" data-udismiss="${k}" title="Do not keep">Ignore</button>
             </div>
           </div>`).join("")}</div>
-        <h4>Bekende personen</h4>`;
+        <h4>Known people</h4>`;
     }
     async function renderPeople() {
       if (state.faces.enabled) {
@@ -851,20 +851,20 @@
       const people = Object.entries(state.faces.people);
       const auto = state.faces.auto || {};
       const sample = (name, id, isAuto) => `<div class="sample${isAuto ? " auto" : ""}"><img src="/api/faces/${encodeURIComponent(name)}/${isAuto ? "auto/" : ""}${id}.jpg" alt="">
-            <button data-del="${esc(name)}|${isAuto ? "auto/" : ""}${id}" aria-label="Foto verwijderen">✕</button></div>`;
+            <button data-del="${esc(name)}|${isAuto ? "auto/" : ""}${id}" aria-label="Remove photo">✕</button></div>`;
       $("people").innerHTML = renderUnknown() + (people.length ? people.map(([name, ids]) => {
         const autos = auto[name] || [];
         return `
         <div class="person">
-          <h3><span>${esc(name)} <span class="muted" style="font-size:.78rem;font-weight:500;font-family:var(--me-font);margin-left:.35rem">${ids.length} foto${ids.length === 1 ? "" : "'s"}${autos.length ? ` + ${autos.length} zelf geleerd` : ""}</span></span>
-            <button class="link-red" data-forget="${esc(name)}">Vergeten</button></h3>
+          <h3><span>${esc(name)} <span class="muted" style="font-size:.78rem;font-weight:500;font-family:var(--me-font);margin-left:.35rem">${ids.length} photo${ids.length === 1 ? "" : "s"}${autos.length ? ` + ${autos.length} learned` : ""}</span></span>
+            <button class="link-red" data-forget="${esc(name)}">Forget</button></h3>
           <div class="samples">${ids.map((id) => sample(name, id, false)).join("")}${autos.map((id) => sample(name, id, true)).join("")}</div>
         </div>`; }).join("")
-        : `<div class="empty"><h3>Nog niemand geleerd</h3>Geef hierboven een onbekend gezicht een naam, of open een event met een persoon.</div>`);
+        : `<div class="empty"><h3>Nobody learned yet</h3>Name an unknown face above, or open an event with a person.</div>`);
     }
     async function postUnknown(path, body) {
       const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Opslaan mislukt"); return null; }
+      if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Saving failed"); return null; }
       const data = await r.json();
       Object.assign(state.faces, data);
       return data;
@@ -885,7 +885,7 @@
       const sel = ev.target.closest("[data-face]");
       if (!sel || !sel.value) return;
       let name = sel.value;
-      if (name === "__new") name = (prompt("Naam van deze persoon:") || "").trim();
+      if (name === "__new") name = (prompt("Name of this person:") || "").trim();
       if (name) learnFace(Number(sel.dataset.face), name); else sel.value = "";
     });
 
@@ -897,22 +897,22 @@
       $("liveFrame").src = c.live;
       $("liveDlg").showModal();
     }
-    // het close-event komt pas na het openen van een volgende camera binnen: dan niet leegmaken
+    // the close event only arrives after the next camera opened: do not clear then
     $("liveDlg").addEventListener("close", () => { if (!$("liveDlg").open) $("liveFrame").src = "about:blank"; });
 
-    // ---------- instellingen ----------
+    // ---------- settings ----------
     const SET_GROUPS = [
-      ["Opname", ["pre_seconds", "post_seconds", "max_clip_seconds"]],
-      ["Detectie", ["objects.labels.persoon", "objects.labels.voertuig", "objects.labels.dier", "objects.min_score", "objects.verify_below", "motion.min_area", "motion.threshold"]],
+      ["Recording", ["pre_seconds", "post_seconds", "max_clip_seconds"]],
+      ["Detection", ["objects.labels.person", "objects.labels.vehicle", "objects.labels.animal", "objects.min_score", "objects.verify_below", "motion.min_area", "motion.threshold"]],
       ["Extra", ["objects.always", "objects.loiter_seconds", "faces.enabled", "faces.auto_learn", "faces.collect_unknown", "plates.enabled"]],
     ];
-    // weergave: min_area en min_score als percentage
+    // display: min_area and min_score as a percentage
     const PCT = { "motion.min_area": 100, "objects.min_score": 100 };
     const setState = { cam: null, schema: {} };
     async function openSettings(name) {
       const data = await api(`/api/cameras/${encodeURIComponent(name)}/settings`);
       setState.cam = name; setState.schema = data.schema;
-      $("setTitle").textContent = `Instellingen – ${camName(name)}`;
+      $("setTitle").textContent = `Settings – ${camName(name)}`;
       $("setForm").innerHTML = SET_GROUPS.map(([title, paths]) => `<div><h4>${title}</h4>${paths.map((p) => {
         const sc = data.schema[p], v = data.values[p], f = PCT[p] || 1;
         if (sc.type === "bool") return `<label class="field"><span>${esc(sc.label)}</span><span class="switch"><input type="checkbox" data-set="${p}" ${v ? "checked" : ""}><span></span></span></label>`;
@@ -931,16 +931,16 @@
       const r = await fetch(`/api/cameras/${encodeURIComponent(setState.cam)}/settings`, {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
       });
-      if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Opslaan mislukt"); return; }
+      if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Saving failed"); return; }
       $("setDlg").close();
       await Promise.all([loadFaces(), loadPlates()]); renderChips(); loadStatus();
     };
 
-    // ---------- masker en zones ----------
-    // twee sets vlakken in procenten: het masker (negeren) en zones (alleen daar telt een object)
+    // ---------- mask and zones ----------
+    // two sets of polygons in percent: the mask (ignore) and zones (objects only count there)
     const MASK_DESC = {
-      mask: "Rode vlakken worden genegeerd: geen beweging, en objecten die daar met hun onderkant staan tellen niet mee.",
-      zones: "Violette zones: zijn er zones, dan tellen alleen objecten die met hun onderkant in een zone staan. Geen zones = het hele beeld. Events krijgen de naam van de zone.",
+      mask: "Red areas are ignored: no motion, and objects whose bottom edge is there do not count.",
+      zones: "Violet zones: when there are zones, only objects whose bottom edge is inside a zone count. No zones = the whole frame. Events get the name of the zone.",
     };
     const mask = { cam: null, mode: "mask", sets: { mask: { polys: [], names: [], dirty: false }, zones: { polys: [], names: [], dirty: false } }, draft: [] };
     const cur = () => mask.sets[mask.mode];
@@ -952,7 +952,7 @@
                                         api(`/api/cameras/${enc}/zones`).catch(() => ({ zones: [] }))]);
       mask.sets.mask = { polys: m.mask || [], names: [], dirty: false };
       mask.sets.zones = { polys: (z.zones || []).map((q) => q.points), names: (z.zones || []).map((q) => q.name), dirty: false };
-      $("maskTitle").textContent = `Masker en zones – ${camName(name)}`;
+      $("maskTitle").textContent = `Mask and zones – ${camName(name)}`;
       $("mImg").src = `/api/cameras/${enc}/frame.jpg?t=${Date.now()}`;
       setMode("mask");
       $("maskDlg").showModal();
@@ -965,7 +965,7 @@
       renderMask();
     }
     function renderMask() {
-      // vlakken in procenten; de svg rekt mee met het beeld
+      // polygons in percent; the svg stretches with the image
       const set = cur(), zones = mask.mode === "zones";
       const pts = (p) => p.map(([x, y]) => `${x},${y}`).join(" ");
       $("mSvg").innerHTML = set.polys.map((p) =>
@@ -976,17 +976,17 @@
         `<span class="pt${i === 0 && mask.draft.length >= 3 ? " first" : ""}" ${i === 0 ? 'data-close-poly' : ""} style="left:${x}%;top:${y}%"></span>`).join("")
         + set.polys.map((p, i) => {
           const [x, y] = centroid(p);
-          const del = `<button class="del" data-del-poly="${i}" ${zones ? "" : `style="left:${x}%;top:${y}%"`} aria-label="Vlak verwijderen">✕</button>`;
+          const del = `<button class="del" data-del-poly="${i}" ${zones ? "" : `style="left:${x}%;top:${y}%"`} aria-label="Remove polygon">✕</button>`;
           return zones ? `<span class="zname" style="left:${x}%;top:${y}%">${esc(set.names[i])}${del}</span>` : del;
         }).join("");
-      const noun = zones ? ["zone", "zones"] : ["vlak", "vlakken"];
+      const noun = zones ? ["zone", "zones"] : ["polygon", "polygons"];
       $("mHint").textContent = mask.draft.length
-        ? (mask.draft.length < 3 ? "Klik nog minstens " + (3 - mask.draft.length) + " punt(en)." : "Klik op het eerste punt (rondje) om het vlak te sluiten.")
-        : `${set.polys.length} ${set.polys.length === 1 ? noun[0] : noun[1]}. Klik punten om ${zones ? "een nieuwe zone" : "een nieuw vlak"} te tekenen.`;
+        ? (mask.draft.length < 3 ? "Click at least " + (3 - mask.draft.length) + " more point(s)." : "Click the first point (circle) to close the polygon.")
+        : `${set.polys.length} ${set.polys.length === 1 ? noun[0] : noun[1]}. Click points to draw ${zones ? "a new zone" : "a new polygon"}.`;
       $("mUndo").disabled = !mask.draft.length;
       $("mClear").disabled = !set.polys.length && !mask.draft.length;
       $("mSave").disabled = !anyDirty() || mask.draft.length > 0;
-      // svg en punten precies over het getoonde beeld leggen (object-fit: contain)
+      // place the svg and points exactly over the displayed image (object-fit: contain)
       const img = $("mImg"), st = $("mStage").getBoundingClientRect(), r = img.getBoundingClientRect();
       const nw = img.naturalWidth || 16, nh = img.naturalHeight || 9;
       const s = Math.min(r.width / nw, r.height / nh), w = nw * s, h = nh * s;
@@ -997,7 +997,7 @@
     $("mImg").addEventListener("load", renderMask);
     window.addEventListener("resize", () => { if ($("maskDlg").open) renderMask(); });
     document.querySelectorAll("[data-mmode]").forEach((b) => b.addEventListener("click", () => {
-      if (mask.draft.length && !confirm("Het half getekende vlak weggooien?")) return;
+      if (mask.draft.length && !confirm("Discard the half-drawn polygon?")) return;
       setMode(b.dataset.mmode);
     }));
     $("mStage").addEventListener("click", (ev) => {
@@ -1009,9 +1009,9 @@
       }
       if (ev.target.closest("[data-close-poly]") && mask.draft.length >= 3) {
         if (mask.mode === "zones") {
-          const name = (prompt("Naam van deze zone (bijv. Oprit, Voordeur):", `Zone ${set.polys.length + 1}`) || "").trim().slice(0, 30);
+          const name = (prompt("Name of this zone (e.g. Driveway, Front door):", `Zone ${set.polys.length + 1}`) || "").trim().slice(0, 30);
           if (!name) return;
-          if (set.names.some((n) => n.toLowerCase() === name.toLowerCase())) { alert("Die naam bestaat al."); return; }
+          if (set.names.some((n) => n.toLowerCase() === name.toLowerCase())) { alert("That name already exists."); return; }
           set.names.push(name);
         }
         set.polys.push(mask.draft); mask.draft = []; set.dirty = true; renderMask(); return;
@@ -1026,7 +1026,7 @@
     });
     $("mUndo").onclick = () => { mask.draft.pop(); renderMask(); };
     $("mClear").onclick = () => {
-      if (!confirm(mask.mode === "zones" ? "Alle zones van deze camera wissen?" : "Alle maskervlakken van deze camera wissen?")) return;
+      if (!confirm(mask.mode === "zones" ? "Clear all zones of this camera?" : "Clear all mask polygons of this camera?")) return;
       Object.assign(cur(), { polys: [], names: [], dirty: true }); mask.draft = []; renderMask();
     };
     $("mSave").onclick = async () => {
@@ -1036,90 +1036,90 @@
       if (mask.sets.zones.dirty) puts.push(["zones", { zones: mask.sets.zones.polys.map((p, i) => ({ name: mask.sets.zones.names[i], points: p })) }]);
       for (const [what, body] of puts) {
         const r = await fetch(`/api/cameras/${enc}/${what}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Opslaan mislukt"); return; }
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Saving failed"); return; }
         mask.sets[what].dirty = false;
       }
       $("maskDlg").close();
     };
     $("maskDlg").addEventListener("cancel", (ev) => {
-      if (anyDirty() && !confirm("Wijzigingen aan masker en zones niet opslaan?")) ev.preventDefault();
+      if (anyDirty() && !confirm("Discard changes to the mask and zones?")) ev.preventDefault();
     });
 
-    // ---------- AI-beschrijving (lokaal vision-model) ----------
-    const AI_REDEN = { breaker: "AI-server tijdelijk overgeslagen", connection: "AI-server niet bereikbaar",
-      model_missing: "model ontbreekt op de AI-server", truncated: "antwoord afgebroken", schema: "ongeldig antwoord",
-      not_json: "ongeldig antwoord", vervangen: "nieuwer beeld gebruikt", wachtrij_vol: "te druk", rate_limit: "te druk",
-      invalid_image: "beeld ongeschikt", image_too_large: "beeld te groot" };
+    // ---------- AI description (local vision model) ----------
+    const AI_REASON = { breaker: "AI server temporarily skipped", connection: "AI server not reachable",
+      model_missing: "model missing on the AI server", truncated: "answer cut off", schema: "invalid answer",
+      not_json: "invalid answer", replaced: "newer image used", queue_full: "too busy", rate_limit: "too busy",
+      invalid_image: "image not suitable", image_too_large: "image too large" };
     function renderAi(e) {
       const el = $("pAi"), a = e.ai;
       if (!a) { el.innerHTML = ""; return; }
       if (a.status !== "ok") {
-        const why = AI_REDEN[a.reden] || a.reden || a.status;
-        el.innerHTML = `<div class="ai-head"><span class="eyebrow">AI-beschrijving</span><span class="badge">${esc(why)}</span></div>`;
+        const why = AI_REASON[a.reason] || a.reason || a.status;
+        el.innerHTML = `<div class="ai-head"><span class="eyebrow">AI description</span><span class="badge">${esc(why)}</span></div>`;
         return;
       }
-      // het oordeel over de beeldkwaliteit is bij kleine modellen onbetrouwbaar: niet tonen
+      // small models judge image quality unreliably: do not show it
       el.innerHTML = `
-        <div class="ai-head"><span class="eyebrow">AI-beschrijving</span>
-          ${a.infrarood ? '<span class="badge">Infrarood</span>' : ""}
-          <span class="muted" style="font-size:.75rem">${esc(a.model)} · lokaal</span></div>
-        <div class="ai-text">${esc(a.beschrijving)}</div>
-        ${a.kenmerken?.length ? `<div class="ai-tags">${a.kenmerken.map((o) => `<span class="badge who">${esc(o)}</span>`).join("")}</div>` : ""}
-        ${a.objecten?.length ? `<div class="ai-tags">${a.objecten.map((o) => `<span class="badge">${esc(o)}</span>`).join("")}</div>` : ""}
-        ${a.onzekerheden?.length ? `<div class="ai-note"><ul>${a.onzekerheden.map((o) => `<li>${esc(o)}</li>`).join("")}</ul></div>` : ""}
-        ${e.extern ? `<div class="ai-head" style="margin-top:.6rem"><span class="eyebrow">Externe AI</span>
-          <span class="badge ${e.extern.melden ? "ok" : ""}">${e.extern.melden ? "Gemeld" : "Niet gemeld"}</span></div>
-          <div class="ai-text">${esc(e.extern.titel ? `${e.extern.titel}: ${e.extern.beschrijving}` : e.extern.beschrijving)}</div>` : ""}`;
+        <div class="ai-head"><span class="eyebrow">AI description</span>
+          ${a.infrared ? '<span class="badge">Infrared</span>' : ""}
+          <span class="muted" style="font-size:.75rem">${esc(a.model)} · local</span></div>
+        <div class="ai-text">${esc(a.description)}</div>
+        ${a.attributes?.length ? `<div class="ai-tags">${a.attributes.map((o) => `<span class="badge who">${esc(o)}</span>`).join("")}</div>` : ""}
+        ${a.objects?.length ? `<div class="ai-tags">${a.objects.map((o) => `<span class="badge">${esc(o)}</span>`).join("")}</div>` : ""}
+        ${a.uncertainties?.length ? `<div class="ai-note"><ul>${a.uncertainties.map((o) => `<li>${esc(o)}</li>`).join("")}</ul></div>` : ""}
+        ${e.external ? `<div class="ai-head" style="margin-top:.6rem"><span class="eyebrow">External AI</span>
+          <span class="badge ${e.external.notify ? "ok" : ""}">${e.external.notify ? "Notified" : "Not notified"}</span></div>
+          <div class="ai-text">${esc(e.external.title ? `${e.external.title}: ${e.external.description}` : e.external.description)}</div>` : ""}`;
     }
 
-    // ---------- vals alarm ----------
+    // ---------- false alarm ----------
     $("pFalse").addEventListener("click", async () => {
       const e = state.items[state.current];
       if (!e) return;
       $("pFalse").disabled = true;
       try {
-        const r = await fetch("/api/events/vals", { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ clip: e.clip, vals: !e.vals }) });
+        const r = await fetch("/api/events/false-alarm", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clip: e.clip, false_alarm: !e.false_alarm }) });
         if (r.status === 401) { location.href = "/login"; return; }
         if (!r.ok) throw new Error(r.status);
         const res = await r.json();
-        e.vals = res.vals;
+        e.false_alarm = res.false_alarm;
         openEvent(state.current);
         renderTimeline();
-        if (res.plek_onthouden) $("pSub").textContent += " · dit ding op deze plek wordt voortaan genegeerd";
-      } catch { $("pSub").textContent += " · opslaan mislukt"; }
+        if (res.spot_learned) $("pSub").textContent += " · this thing in this spot will be ignored from now on";
+      } catch { $("pSub").textContent += " · saving failed"; }
       $("pFalse").disabled = false;
     });
 
-    // ---------- AI-vergelijking ----------
+    // ---------- AI comparison ----------
     async function renderCompare() {
       const el = $("cmpBody");
-      el.innerHTML = '<div class="muted">Laden…</div>';
+      el.innerHTML = '<div class="muted">Loading…</div>';
       let c;
-      try { c = await api("/api/ai-vergelijking?days=7"); } catch { el.innerHTML = '<div class="muted">Niet beschikbaar.</div>'; return; }
+      try { c = await api("/api/ai-comparison?days=7"); } catch { el.innerHTML = '<div class="muted">Not available.</div>'; return; }
       const stat = (n, label) => `<div class="stat"><b>${n}</b><span>${label}</span></div>`;
       if (!c.events) {
-        el.innerHTML = '<div class="empty"><h3>Nog geen vergelijking</h3>Zodra de externe AI in Home Assistant een persoon beoordeelt, verschijnt die hier naast het lokale oordeel.</div>';
+        el.innerHTML = '<div class="empty"><h3>No comparison yet</h3>As soon as the external AI in Home Assistant judges a person, it shows up here next to the local verdict.</div>';
         return;
       }
-      const pct = Math.round(100 * c.eens / c.events);
+      const pct = Math.round(100 * c.agree / c.events);
       el.innerHTML = `<div class="cmp-stats">
-          ${stat(c.events, "beoordeeld")}
-          ${stat(`${pct}%`, "eens")}
-          ${stat(c.alleen_extern, "alleen extern gemeld")}
-          ${stat(c.alleen_lokaal, "alleen lokaal gezien")}
-          ${stat(c.lokaal_mediaan_ms ? `${Math.round(c.lokaal_mediaan_ms / 1000)} s` : "–", "lokaal per beeld")}
+          ${stat(c.events, "judged")}
+          ${stat(`${pct}%`, "agree")}
+          ${stat(c.only_external, "only external notified")}
+          ${stat(c.only_local, "only local saw it")}
+          ${stat(c.local_median_ms ? `${Math.round(c.local_median_ms / 1000)} s` : "–", "local per image")}
         </div>
-        ${c.oneens.length ? '<span class="eyebrow">Oneens</span>' : ""}
-        ${c.oneens.map((r) => `<div class="cmp-row">
+        ${c.disagree.length ? '<span class="eyebrow">Disagree</span>' : ""}
+        ${c.disagree.map((r) => `<div class="cmp-row">
           ${r.snapshot ? `<img src="/clips/${encodeURI(r.snapshot)}" alt="" loading="lazy">` : "<div></div>"}
           <div class="txt"><span><b>${esc(camName(r.camera))} · ${dayLabel(new Date(r.start))} ${fmtTime(r.start)}</b></span>
-            <span><b>Extern ${r.extern ? "meldt" : "meldt niet"}:</b> ${esc(r.extern_tekst || "–")}</span>
-            <span><b>Lokaal ${r.lokaal ? "ziet het" : "ziet niets"}:</b> ${esc(r.lokaal_tekst || "–")}</span></div>
+            <span><b>External ${r.external ? "notifies" : "does not notify"}:</b> ${esc(r.external_text || "–")}</span>
+            <span><b>Local ${r.local ? "sees it" : "sees nothing"}:</b> ${esc(r.local_text || "–")}</span></div>
         </div>`).join("")}`;
     }
 
-    // ---------- kentekens ----------
+    // ---------- licence plates ----------
     async function loadPlates() {
       try { state.plates = await api("/api/plates"); } catch {}
     }
@@ -1131,18 +1131,18 @@
         return `<div class="plate">
           ${p.crop ? `<img src="/clips/${encodeURI(p.crop)}" alt="">` : ""}
           <span class="plate-txt">${esc(p.plate)}</span>
-          <span class="nm">${name ? esc(name) : "Onbekende auto"}</span>
-          ${state.plates.enabled ? `<button class="btn" data-plate-name="${esc(p.plate)}">${name ? "Naam wijzigen" : "Naam geven"}</button>` : ""}
+          <span class="nm">${name ? esc(name) : "Unknown vehicle"}</span>
+          ${state.plates.enabled ? `<button class="btn" data-plate-name="${esc(p.plate)}">${name ? "Rename" : "Give a name"}</button>` : ""}
         </div>`;
       }).join("");
     }
     async function namePlate(plate) {
-      const name = (prompt(`Naam voor ${plate} (bijv. Onze auto, Opa en oma):`, state.plates.known[plate] || "") || "").trim();
+      const name = (prompt(`Name for ${plate} (e.g. Our car, Grandparents):`, state.plates.known[plate] || "") || "").trim();
       if (!name) return;
       const r = await fetch(`/api/plates/${encodeURIComponent(plate)}`, {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
       });
-      if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Opslaan mislukt"); return; }
+      if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Saving failed"); return; }
       state.plates.known = (await r.json()).known;
       const e = state.items[state.current];
       if (e) renderPlates(e);
@@ -1152,11 +1152,11 @@
       const known = Object.entries(state.plates.known);
       $("platesList").innerHTML = known.length ? known.map(([plate, name]) => `
         <div class="person"><h3><span>${esc(name)} <span class="plate-txt" style="margin-left:.4rem">${esc(plate)}</span></span>
-          <button class="link-red" data-forget-plate="${esc(plate)}">Vergeten</button></h3></div>`).join("")
-        : `<div class="empty"><h3>Nog geen bekende auto's</h3>Open een event met een auto en kies "Naam geven" bij het kenteken.</div>`;
+          <button class="link-red" data-forget-plate="${esc(plate)}">Forget</button></h3></div>`).join("")
+        : `<div class="empty"><h3>No known vehicles yet</h3>Open an event with a car and choose "Give a name" next to the plate.</div>`;
     }
 
-    // ---------- voorvertoning bij aanwijzen (alleen met muis) ----------
+    // ---------- preview on hover (mouse only) ----------
     const canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
     function attachPreviews() {
       if (!canHover) return;
@@ -1166,10 +1166,10 @@
         if (!e || !thumb) return;
         let timer = null;
         card.addEventListener("mouseenter", () => {
-          timer = setTimeout(() => {   // kort wachten: niet bij elke muisbeweging een video laden
+          timer = setTimeout(() => {   // wait briefly: do not load a video on every mouse movement
             const v = document.createElement("video");
             v.muted = true; v.playsInline = true; v.loop = true; v.autoplay = true; v.preload = "auto";
-            v.src = `/clips/${encodeURI(e.clip)}#t=8`;   // ±10 s voorbuffer: begin net voor de detectie
+            v.src = `/clips/${encodeURI(e.clip)}#t=8`;   // ~10 s pre-buffer: start just before the detection
             thumb.prepend(v);
           }, 250);
         });
@@ -1181,18 +1181,18 @@
       });
     }
 
-    // ---------- zoeken ----------
+    // ---------- search ----------
     let qTimer = null;
     $("q").addEventListener("input", () => {
       clearTimeout(qTimer);
       qTimer = setTimeout(() => { state.q = $("q").value.trim() || null; state.items = []; loadEvents(); }, 300);
     });
 
-    // ---------- interactie ----------
+    // ---------- interaction ----------
     document.addEventListener("click", (ev) => {
-      if (ev.target.closest("#openBeheer")) { renderBeheer(); $("beheerDlg").showModal(); return; }
-      // vanuit Beheer een ander venster openen: Beheer eerst sluiten
-      if ($("beheerDlg").open && $("beheerDlg").contains(ev.target) && ev.target.closest("[data-settings],[data-mask],#openCompare,#openKeys")) $("beheerDlg").close();
+      if (ev.target.closest("#openManage")) { renderManage(); $("manageDlg").showModal(); return; }
+      // opening another dialog from Manage: close Manage first
+      if ($("manageDlg").open && $("manageDlg").contains(ev.target) && ev.target.closest("[data-settings],[data-mask],#openCompare,#openKeys")) $("manageDlg").close();
       if (ev.target.closest("#filterToggle")) {
         const f = document.querySelector(".filters"); f.classList.toggle("open");
         $("filterToggle").setAttribute("aria-expanded", String(f.classList.contains("open")));
@@ -1212,7 +1212,7 @@
       const mb = ev.target.closest("[data-mask]");
       if (mb) { ev.stopPropagation(); openMask(mb.dataset.mask); return; }
       if (ev.target.closest("[data-mask-close]")) {
-        if (!anyDirty() || confirm("Wijzigingen aan masker en zones niet opslaan?")) $("maskDlg").close();
+        if (!anyDirty() || confirm("Discard changes to the mask and zones?")) $("maskDlg").close();
         return;
       }
       if (ev.target.closest("#openPlates")) { renderPlatesList(); $("platesDlg").showModal(); return; }
@@ -1220,7 +1220,7 @@
       if (pn) { namePlate(pn.dataset.plateName); return; }
       const fp = ev.target.closest("[data-forget-plate]");
       if (fp) {
-        if (confirm(`${fp.dataset.forgetPlate} vergeten?`)) {
+        if (confirm(`Forget ${fp.dataset.forgetPlate}?`)) {
           fetch(`/api/plates/${encodeURIComponent(fp.dataset.forgetPlate)}`, { method: "DELETE" })
             .then((r) => r.json()).then((d) => { state.plates.known = d.known || {}; renderPlatesList(); renderChips(); renderTimeline(); loadStatus(); });
         }
@@ -1238,7 +1238,7 @@
       if (ua) {
         const sel = document.querySelector(`[data-ugroup="${ua.dataset.uassign}"]`);
         let name = sel?.value || "";
-        if (name === "__new") name = (prompt("Naam van deze persoon:") || "").trim();
+        if (name === "__new") name = (prompt("Name of this person:") || "").trim();
         if (name) assignUnknown(Number(ua.dataset.uassign), name); else sel?.focus();
         return;
       }
@@ -1249,7 +1249,7 @@
         return;
       }
       const fg = ev.target.closest("[data-forget]");
-      if (fg) { if (confirm(`${fg.dataset.forget} en alle foto's vergeten?`)) forget(`/api/faces/${encodeURIComponent(fg.dataset.forget)}`); return; }
+      if (fg) { if (confirm(`Forget ${fg.dataset.forget} and all photos?`)) forget(`/api/faces/${encodeURIComponent(fg.dataset.forget)}`); return; }
       if (ev.target === $("peopleDlg")) { $("peopleDlg").close(); return; }
       const cam = ev.target.closest("[data-cam]");
       if (cam) {
@@ -1279,32 +1279,32 @@
       if (ev.key === "ArrowRight" && !$("pNext").disabled) step(1);
     });
 
-    // ---------- beheer ----------
-    function renderBeheer() {
+    // ---------- manage ----------
+    function renderManage() {
       const st = state.status || {}, h = st.health || {}, ai = st.ai || {};
-      const row = (k, v) => `<div class="beheer-row"><span>${k}</span><b>${v}</b></div>`;
+      const row = (k, v) => `<div class="manage-row"><span>${k}</span><b>${v}</b></div>`;
       const dot = (ok) => `<span class="dot ${ok ? "on" : "off"}"></span> `;
-      $("beheerBody").innerHTML = `
-        <div class="beheer-list">
-          ${row("Opslag", `${state.gb ?? "–"} / ${st.storage?.max_gb ?? "–"} GB`)}
-          ${row("Home Assistant", st.mqtt_connected === null ? "niet ingesteld" : dot(st.mqtt_connected) + (st.mqtt_connected ? "verbonden" : "niet verbonden"))}
-          ${h.cpu != null ? row("Server", `CPU ${h.cpu}% · geheugen ${Math.round(h.geheugen ?? 0)}% · schijf ${h.schijf}% vol`) : ""}
-          ${row("Herkenning", esc(st.detector || "uit"))}
-          ${ai.state && ai.state !== "uit" ? row("AI-beschrijvingen", dot(ai.state === "ready") + esc(ai.model || "")) : ""}
+      $("manageBody").innerHTML = `
+        <div class="manage-list">
+          ${row("Storage", `${state.gb ?? "–"} / ${st.storage?.max_gb ?? "–"} GB`)}
+          ${row("Home Assistant", st.mqtt_connected === null ? "not configured" : dot(st.mqtt_connected) + (st.mqtt_connected ? "connected" : "not connected"))}
+          ${h.cpu != null ? row("Server", `CPU ${h.cpu}% · memory ${Math.round(h.memory ?? 0)}% · disk ${h.disk}% full`) : ""}
+          ${row("Detection", esc(st.detector || "off"))}
+          ${ai.state && ai.state !== "off" ? row("AI descriptions", dot(ai.state === "ready") + esc(ai.model || "")) : ""}
         </div>
-        <span class="eyebrow">Camera's</span>
-        <div class="beheer-list">
-          ${state.cams.map((c) => `<div class="beheer-row"><b>${esc(c.friendly_name)}</b><div class="btns">
-            <button class="btn" data-settings="${esc(c.name)}">Instellingen</button>
-            <button class="btn" data-mask="${esc(c.name)}">Masker en zones</button></div></div>`).join("")}
+        <span class="eyebrow">Cameras</span>
+        <div class="manage-list">
+          ${state.cams.map((c) => `<div class="manage-row"><b>${esc(c.friendly_name)}</b><div class="btns">
+            <button class="btn" data-settings="${esc(c.name)}">Settings</button>
+            <button class="btn" data-mask="${esc(c.name)}">Mask and zones</button></div></div>`).join("")}
         </div>
         <div class="btns">
-          ${ai.state && ai.state !== "uit" ? '<button class="btn" id="openCompare">AI-vergelijking</button>' : ""}
+          ${ai.state && ai.state !== "off" ? '<button class="btn" id="openCompare">AI comparison</button>' : ""}
           ${state.auth?.enabled ? '<button class="btn" id="openKeys">Passkeys</button>' : ""}
         </div>`;
     }
 
-    // ---------- links uit meldingen: ?live=deurbel, ?clip=<pad>, ?camera=hek&open=laatste ----------
+    // ---------- links from notifications: ?live=doorbell, ?clip=<path>, ?camera=gate&open=latest ----------
     async function openClip(rel) {
       let i = state.items.findIndex((e) => e.clip === rel);
       if (i < 0) {
@@ -1322,11 +1322,11 @@
       if (cam && state.cams.some((c) => c.name === cam)) {
         state.camera = cam; renderChips(); renderCams(); state.items = [];
         await loadEvents();
-        if (qs.get("open") === "laatste" && state.items.length) openEvent(0);
+        if (qs.get("open") === "latest" && state.items.length) openEvent(0);
       }
     }
 
-    // ---------- start en verversen ----------
+    // ---------- start and refresh ----------
     (async () => {
       try { state.auth = await api("/api/auth/state"); } catch {}
       await Promise.all([loadFaces(), loadPlates()]);

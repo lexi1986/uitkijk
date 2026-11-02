@@ -1,0 +1,91 @@
+blueprint:
+  name: Uitkijk – server health
+  description: >-
+    Notification when Uitkijk restarted after a crash (e.g. out of memory), when memory or disk are
+    almost full, or when a camera has had no image for more than 5 minutes.
+  domain: automation
+  author: Uitkijk
+  source_url: https://github.com/lexi1986/uitkijk/blob/main/homeassistant/blueprints/automation/uitkijk/server_health.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    alert_entity:
+      name: Server alert
+      description: event.camera_service_alert
+      selector:
+        entity:
+          domain: event
+          integration: mqtt
+    memory:
+      name: Memory sensor
+      description: sensor.camera_service_memory
+      selector:
+        entity:
+          domain: sensor
+          integration: mqtt
+    disk:
+      name: Disk sensor
+      description: sensor.camera_service_disk
+      selector:
+        entity:
+          domain: sensor
+          integration: mqtt
+    online:
+      name: Online sensors of the cameras
+      description: binary_sensor.cam_<name>_online
+      selector:
+        entity:
+          domain: binary_sensor
+          integration: mqtt
+          multiple: true
+    notify_targets:
+      name: Notification services (e.g. only the administrator)
+      selector:
+        text:
+          multiple: true
+
+mode: parallel
+max: 5
+
+variables:
+  targets: !input notify_targets
+
+triggers:
+  - trigger: state
+    entity_id: !input alert_entity
+    not_to: ["unavailable", "unknown"]
+    id: alert
+  - trigger: numeric_state
+    entity_id: !input memory
+    above: 90
+    for: { minutes: 10 }
+    id: memory
+  - trigger: numeric_state
+    entity_id: !input disk
+    above: 90
+    for: { minutes: 30 }
+    id: disk
+  - trigger: state
+    entity_id: !input online
+    to: "off"
+    for: { minutes: 5 }
+    id: offline
+
+actions:
+  - variables:
+      text: >-
+        {% if trigger.id == 'alert' %}{{ '⚠️ Uitkijk restarted after a crash|Recordings in between may be missing.' if trigger.to_state.attributes.event_type == 'restart_after_crash' else '' }}
+        {% elif trigger.id == 'memory' %}🧠 Uitkijk: memory almost full|Above 90% for 10 minutes. At 100% the service stops.
+        {% elif trigger.id == 'disk' %}💾 Uitkijk: disk almost full|Old recordings are cleaned up, but check the storage.
+        {% else %}📷 {{ state_attr(trigger.entity_id, 'friendly_name') | replace(' Online', '') }} offline|No image for 5 minutes. Check power, network or camera.{% endif %}
+  - condition: template
+    value_template: "{{ text | trim != '' }}"
+  - repeat:
+      for_each: "{{ targets }}"
+      sequence:
+        - action: "{{ repeat.item }}"
+          data:
+            title: "{{ (text | trim).split('|')[0] }}"
+            message: "{{ (text | trim).split('|')[1] }}"
+            data:
+              group: camera-status

@@ -1,4 +1,4 @@
-"""Oude clips opruimen: eerst op leeftijd, daarna op totale grootte (oudste eerst)."""
+"""Clean up old clips: first by age, then by total size (oldest first)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ EXTS = (".mp4", ".jpg", ".json")
 
 
 def _event_groups(clips_dir: Path) -> list[tuple[float, list[Path]]]:
-    """Alle events als (mtime, [bestanden]) — mp4/jpg/json met dezelfde naam horen bij elkaar."""
+    """All events as (mtime, [files]); mp4/jpg/json with the same name belong together."""
     groups: dict[Path, list[Path]] = {}
     for f in clips_dir.rglob("*"):
         if f.is_file() and f.suffix in EXTS:
@@ -31,15 +31,15 @@ def _event_groups(clips_dir: Path) -> list[tuple[float, list[Path]]]:
 
 
 def _label(files: list[Path]) -> str | None:
-    """Label uit de bestandsnaam: <tijd>_<label>[_n].<ext> (ook .face1.jpg, .plate1.jpg)."""
+    """Label from the file name: <time>_<label>[_n].<ext> (also .face1.jpg, .plate1.jpg)."""
     parts = files[0].name.split(".")[0].split("_")
     return parts[1] if len(parts) > 1 else None
 
 
 def cleanup(clips_dir: Path, max_days: float, max_gb: float,
             days_by_label: dict[str, float] | None = None) -> tuple[int, float]:
-    """Geeft (aantal verwijderde events, totale grootte in GB daarna). Per label kan een
-    eigen bewaartermijn gelden (bijv. personen langer dan beweging)."""
+    """Returns (number of removed events, total size in GB afterwards). Each label can have
+    its own retention period (e.g. people longer than motion)."""
     if not clips_dir.exists():
         return 0, 0.0
     groups = _event_groups(clips_dir)
@@ -58,7 +58,7 @@ def cleanup(clips_dir: Path, max_days: float, max_gb: float,
     sizes = [(m, fs, sum(f.stat().st_size for f in fs if f.exists())) for m, fs in remaining]
     total = sum(s for _, _, s in sizes)
     limit = max_gb * 1024 ** 3
-    for _m, files, size in sizes:  # oudste eerst
+    for _m, files, size in sizes:  # oldest first
         if total <= limit:
             break
         for f in files:
@@ -66,7 +66,7 @@ def cleanup(clips_dir: Path, max_days: float, max_gb: float,
         total -= size
         removed += 1
 
-    # lege dagmappen opruimen
+    # remove empty day folders
     for d in sorted((p for p in clips_dir.rglob("*") if p.is_dir() and ".parts" not in p.parts),
                     reverse=True):
         try:
@@ -94,10 +94,10 @@ class RetentionWorker(threading.Thread):
                 removed, self.used_gb = cleanup(self.clips_dir, self.max_days, self.max_gb,
                                                 self.days_by_label)
                 if removed:
-                    log.info("Opruimen: %d events verwijderd, nu %.2f GB in gebruik", removed, self.used_gb)
+                    log.info("Cleanup: removed %d events, %.2f GB now in use", removed, self.used_gb)
                     self.on_cleanup()
             except Exception:  # noqa: BLE001
-                log.exception("Opruimen mislukt")
+                log.exception("Cleanup failed")
             if self._stop.wait(self.interval):
                 return
 

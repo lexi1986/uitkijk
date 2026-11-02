@@ -1,132 +1,132 @@
-# camera-service configuratie
-# Met Docker maakt de installatiewizard data/config.yaml voor je; dit bestand toont alle opties.
-# Zonder Docker: kopieer naar /etc/camera-service/config.yaml en pas aan.
-# Na wijzigen: systemctl restart camera-service
+# Uitkijk configuration
+# With Docker the setup wizard creates data/config.yaml for you; this file lists all options.
+# Without Docker: copy to /etc/camera-service/config.yaml and adjust.
+# After changing: restart the service (docker compose restart camsvc / systemctl restart camera-service)
 
 log_level: INFO
 
 storage:
-  clips_dir: /clips                 # apart mountpoint in de LXC
+  clips_dir: /clips                 # separate disk or mount point recommended
   state_dir: /var/lib/camera-service
-  retention_days: 7                 # clips ouder dan dit worden verwijderd
-  retention_days_by_label:          # per label langer of korter bewaren
-    persoon: 30
-    aanbellen: 30
-  max_gb: 25                        # daarboven gaan de oudste clips weg
+  retention_days: 7                 # clips older than this are removed
+  retention_days_by_label:          # keep some labels longer or shorter
+    person: 30
+    doorbell: 30
+  max_gb: 25                        # above this the oldest clips go first
 
 api:
-  host: 0.0.0.0                     # achter Caddy (HTTPS, passkeys): 127.0.0.1
+  host: 0.0.0.0                     # behind a reverse proxy (HTTPS, passkeys): 127.0.0.1
   port: 8080
-  # Adres waarmee HA en je telefoon (thuis/VPN) de service bereiken.
-  # Wordt gebruikt in de clip- en snapshot-links in Home Assistant.
+  # Address at which Home Assistant and your phone reach the service.
+  # Used in the clip and snapshot links sent to Home Assistant.
   public_url: http://192.168.1.20:8080
 
 mqtt:
-  host: 192.168.1.5                 # Home Assistant met de Mosquitto add-on
+  host: 192.168.1.5                 # Home Assistant with the Mosquitto app; empty = no MQTT
   port: 1883
-  username: camera-service
-  password: VERANDER_MIJ
+  username: uitkijk
+  password: CHANGE_ME
   topic_prefix: camsvc
   discovery_prefix: homeassistant
 
 model:
-  path: /opt/camera-service/models/yolo11n.onnx   # zie deploy/export-model.sh
-  # Google Coral (USB): wordt gebruikt als de Coral werkt, anders `path` op de CPU.
-  # install.sh zet deze regel zelf zodra het Coral-model er is.
+  path: /opt/camera-service/models/yolo11n.onnx   # see deploy/export-model.sh (Docker: /data/models/yolo11n.onnx)
+  # Google Coral (USB): used when the Coral works, otherwise `path` on the CPU.
+  # install.sh sets this line itself once the Coral model exists.
   # coral_path: /opt/camera-service/models/yolo11n_edgetpu.tflite
-  device: AUTO                      # alleen voor OpenVINO (.xml): AUTO = iGPU, anders CPU
+  device: AUTO                      # only for OpenVINO (.xml): AUTO = iGPU, otherwise CPU
   input_size: 320
 
-# Live beeld op de webpagina via go2rtc (bijv. de go2rtc-app in Home Assistant). Per camera is de
-# streamnaam in go2rtc standaard gelijk aan de cameranaam; anders `live: <naam>` bij de camera.
+# Live view on the web page via go2rtc (included in the Docker setup). Per camera the stream name in
+# go2rtc is the camera name by default; otherwise `live: <name>` on the camera.
 # live:
-#   go2rtc_url: http://192.168.1.5:1984
+#   go2rtc_url: http://localhost:1984
 
-# Beschrijvingen van snapshots door een lokaal vision-model (Ollama), alleen via een SSH-tunnel
-# op loopback (zie README "AI-beschrijvingen"). Uit tenzij hier aangezet.
+# Descriptions of snapshots by a local vision model (Ollama), only through an SSH tunnel on
+# loopback (see the guide, "AI descriptions"). Off unless enabled here.
 # ai:
 #   enabled: true
-#   base_url: http://127.0.0.1:11435     # de tunnel; andere adressen worden geweigerd
-#   model: qwen3-vl:4b-instruct          # beter dan gemma3:4b bij infrarood en personen
-#   labels: [persoon, voertuig, aanbellen]
-#   camera_interval: 30                  # hooguit één beschrijving per camera per 30 s
+#   base_url: http://127.0.0.1:11435     # the tunnel; other addresses are refused
+#   model: qwen3-vl:4b-instruct
+#   labels: [person, vehicle, doorbell]
+#   camera_interval: 30                  # at most one description per camera per 30 s
 #   global_per_minute: 6
 
-# Standaardwaarden voor alle camera's; per camera te overschrijven.
+# Defaults for all cameras; can be overridden per camera.
 defaults:
-  pre_seconds: 10                   # pre-buffer (begint op een keyframe, dus 10-12 s)
-  post_seconds: 30                  # doorlopen na de laatste detectie
+  pre_seconds: 10                   # pre-buffer (starts at a keyframe, so 10-12 s)
+  post_seconds: 30                  # keep recording after the last detection
   max_clip_seconds: 300
   record_audio: true
-  hwaccel: auto                     # auto / vaapi / qsv / none (zie README)
+  hwaccel: auto                     # auto / vaapi / qsv / none (see the guide)
   motion:
-    fps: 5                          # zoveel frames per seconde worden bekeken
-    width: 320                      # verkleind voor bewegingsdetectie
-    threshold: 25                   # pixelverschil dat als beweging telt (0-255)
-    min_area: 0.004                 # deel van het beeld dat moet bewegen (0.4%)
+    fps: 5                          # frames per second that are looked at
+    width: 320                      # downscaled for motion detection
+    threshold: 25                   # pixel difference that counts as motion (0-255)
+    min_area: 0.004                 # share of the frame that has to move (0.4%)
     cooldown_seconds: 5
   objects:
     enabled: true
-    max_fps: auto                   # modelaanroepen per seconde; auto = 5 met Coral, anders 2
-    always: false                   # met Coral: ook zonder beweging naar personen kijken
+    max_fps: auto                   # model runs per second; auto = 5 with a Coral, otherwise 2
+    always: false                   # with a Coral: also look for people without motion
     min_score: 0.55
-    min_hits: 2                     # zo vaak gezien binnen het venster = bevestigd
+    min_hits: 2                     # seen this often within the window = confirmed
     hit_window_seconds: 3
     labels:
-      persoon: true
-      voertuig: true
-      dier: false
+      person: true
+      vehicle: true
+      animal: false
 
-# Namen: alleen a-z, 0-9 en _. Ze komen terug in Home Assistant (binary_sensor.cam_<naam>_persoon).
-# Pas de namen, IP-adressen en inloggegevens aan.
+# Names: only a-z, 0-9 and _. They show up in Home Assistant (binary_sensor.cam_<name>_person).
+# Change the names, IP addresses and logins.
 cameras:
-  # --- Foscam VD1 videodeurbel ---------------------------------------------------------
-  # RTSP staat bij Foscam op poort 88 (soms 554): videoMain = hoge kwaliteit, videoSub = laag.
-  # Test eerst met VLC: Media → Netwerkstroom openen → de URL hieronder.
-  # De audio van de VD1 (G.711) wordt in de clips automatisch omgezet naar AAC.
-  - name: deurbel
-    friendly_name: Deurbel
-    main_url: rtsp://gebruiker:wachtwoord@192.168.1.31:88/videoMain
-    sub_url: rtsp://gebruiker:wachtwoord@192.168.1.31:88/videoSub
-    # H.264 Baseline (Foscam) speelt op iPhone niet via MSE: eerst WebRTC proberen.
+  # --- Foscam video doorbell -----------------------------------------------------------
+  # Foscam RTSP is on port 88 (sometimes 554): videoMain = high quality, videoSub = low.
+  # Test in VLC first: Media → Open Network Stream → the URL below.
+  # The doorbell's G.711 audio is converted to AAC in the clips automatically.
+  - name: front_door
+    friendly_name: Front door
+    main_url: rtsp://user:password@192.168.1.31:88/videoMain
+    sub_url: rtsp://user:password@192.168.1.31:88/videoSub
+    # H.264 Baseline (Foscam) does not play on iPhone via MSE: try WebRTC first.
     live_mode: webrtc,mse
-    # Gezichtsherkenning: personen leren via de webpagina (zie README).
+    # Face recognition: teach people via the web page (see the guide).
     faces:
       enabled: true
-    # Met Coral: ook iemand die stil voor de deur staat blijft gezien worden.
+    # With a Coral: someone standing still at the door keeps being seen.
     objects:
       always: true
-    # Of via ONVIF (Foscam gebruikt meestal poort 888):
-    # onvif: {host: 192.168.1.31, port: 888, username: gebruiker, password: wachtwoord}
+    # Or via ONVIF (Foscam usually uses port 888):
+    # onvif: {host: 192.168.1.31, port: 888, username: user, password: password}
     mask:
-      # - [[0, 0], [100, 0], [100, 15], [0, 15]]     # bovenste strook (bijv. straat)
+      # - [[0, 0], [100, 0], [100, 15], [0, 15]]     # top strip (e.g. the street)
 
   # --- Reolink 1 ------------------------------------------------------------------------
-  # Reolink: h264Preview_01_main / h264Preview_01_sub (of Preview_01_main/_sub).
-  - name: oprit
-    friendly_name: Oprit
-    main_url: rtsp://gebruiker:wachtwoord@192.168.1.32:554/h264Preview_01_main
-    sub_url: rtsp://gebruiker:wachtwoord@192.168.1.32:554/h264Preview_01_sub
-    # onvif: {host: 192.168.1.32, port: 8000, username: gebruiker, password: wachtwoord}
+  # Reolink: h264Preview_01_main / h264Preview_01_sub (or Preview_01_main/_sub).
+  - name: driveway
+    friendly_name: Driveway
+    main_url: rtsp://user:password@192.168.1.32:554/h264Preview_01_main
+    sub_url: rtsp://user:password@192.168.1.32:554/h264Preview_01_sub
+    # onvif: {host: 192.168.1.32, port: 8000, username: user, password: password}
     mask:
 
   # --- Reolink 2 ------------------------------------------------------------------------
-  - name: tuin
-    friendly_name: Tuin
-    main_url: rtsp://gebruiker:wachtwoord@192.168.1.33:554/h264Preview_01_main
-    sub_url: rtsp://gebruiker:wachtwoord@192.168.1.33:554/h264Preview_01_sub
+  - name: garden
+    friendly_name: Garden
+    main_url: rtsp://user:password@192.168.1.33:554/h264Preview_01_main
+    sub_url: rtsp://user:password@192.168.1.33:554/h264Preview_01_sub
     mask:
-    # Per camera kun je alles uit `defaults` overschrijven, bijv. ook dieren in de tuin:
+    # Per camera you can override anything from `defaults`, e.g. also animals in the garden:
     objects:
       labels:
-        dier: true
+        animal: true
 
-# Optioneel: inloggen met passkeys (vraagt HTTPS met een domeinnaam, bijv. Caddy ervoor)
+# Optional: log in with passkeys (requires HTTPS with a domain name, e.g. a reverse proxy in front)
 # auth:
 #   enabled: true
-#   rp_id: camera.example.nl
-#   origin: https://camera.example.nl
+#   rp_id: camera.example.com
+#   origin: https://camera.example.com
 #   session_days: 90
 
-# Dagoverzicht naar Home Assistant (leeg = uit)
+# Daily summary to Home Assistant (empty = off)
 # summary_time: "22:00"

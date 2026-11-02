@@ -1,10 +1,9 @@
-"""Modellen klaarzetten bij het opstarten (eenmalig, met controle van de checksums).
+"""Prepare models at startup (once, with checksum verification).
 
-- Objectherkenning (YOLO11n als ONNX): zit in het Docker-image en wordt naar de modelmap gekopieerd.
-- Gezichtsherkenning en kleding (alleen als een camera faces.enabled heeft): YuNet en SFace (OpenCV
-  Zoo), YouTu-ReID (Apache-2.0) en ArcFace w600k_r50 uit InsightFace buffalo_l. Dat laatste model
-  is alleen voor niet-commercieel gebruik en wordt daarom nooit meegeleverd, maar hier bij de
-  gebruiker zelf gedownload.
+- Object detection (YOLO11n as ONNX): part of the Docker image and copied to the model folder.
+- Faces and clothing (only when a camera has faces.enabled): YuNet and SFace (OpenCV Zoo),
+  YouTu-ReID (Apache-2.0) and ArcFace w600k_r50 from InsightFace buffalo_l. That last model is for
+  non-commercial use only, so it is never shipped; the user's own installation downloads it here.
 """
 
 from __future__ import annotations
@@ -61,12 +60,12 @@ def _download(url: str) -> bytes:
 def _fetch(dest: Path, url: str, sha: str) -> None:
     if _ok(dest, sha):
         return
-    log.info("Model %s downloaden…", dest.name)
+    log.info("Downloading model %s…", dest.name)
     tmp = dest.with_suffix(".tmp")
     tmp.write_bytes(_download(url))
     if _sha(tmp) != sha:
         tmp.unlink(missing_ok=True)
-        raise ValueError(f"checksum van {dest.name} klopt niet")
+        raise ValueError(f"checksum of {dest.name} does not match")
     tmp.replace(dest)
 
 
@@ -75,27 +74,27 @@ def _fetch_arcface(dest_dir: Path) -> None:
     dest = dest_dir / name
     if _ok(dest, sha):
         return
-    log.info("Model %s downloaden (zip van ± 290 MB, alleen voor niet-commercieel gebruik)…", name)
+    log.info("Downloading model %s (zip of ~290 MB, non-commercial use only)…", name)
     data = zipfile.ZipFile(io.BytesIO(_download(url))).read(name)
     if hashlib.sha256(data).hexdigest() != sha:
-        raise ValueError(f"checksum van {name} klopt niet")
+        raise ValueError(f"checksum of {name} does not match")
     tmp = dest.with_suffix(".tmp")
     tmp.write_bytes(data)
     tmp.replace(dest)
 
 
 def ensure_models(cfg: "Config") -> None:
-    """Ontbrekende modellen klaarzetten. Fouten loggen, nooit het opstarten blokkeren: zonder
-    gezichtsmodellen draait de rest gewoon, zonder objectmodel alleen bewegingsdetectie."""
+    """Prepare missing models. Log errors, never block startup: without face models everything
+    else runs normally, without the object model only motion detection runs."""
     model = Path(cfg.model["path"])
     try:
         model.parent.mkdir(parents=True, exist_ok=True)
         bundled = BUNDLED_DIR / model.name
         if not model.exists() and bundled.exists():
             shutil.copy2(bundled, model)
-            log.info("Objectmodel %s klaargezet", model.name)
+            log.info("Object model %s prepared", model.name)
     except OSError as exc:
-        log.error("Modelmap %s niet bruikbaar: %s", model.parent, exc)
+        log.error("Model folder %s not usable: %s", model.parent, exc)
         return
     if not any(c.settings["faces"]["enabled"] for c in cfg.cameras):
         return
@@ -104,4 +103,4 @@ def ensure_models(cfg: "Config") -> None:
             _fetch(model.parent / name, url, sha)
         _fetch_arcface(model.parent)
     except (OSError, ValueError, zipfile.BadZipFile) as exc:
-        log.error("Gezichtsmodellen downloaden mislukt (%s); probeer het bij de volgende start opnieuw", exc)
+        log.error("Downloading face models failed (%s); will retry at the next start", exc)

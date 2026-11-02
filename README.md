@@ -1,113 +1,114 @@
 # Uitkijk
 
-Je eigen lichte camerasysteem voor thuis: neemt op wat er gebeurt, herkent personen, auto's en
-dieren, stuurt meldingen via Home Assistant en heeft een eigen webpagina voor telefoon en laptop.
-Alles draait lokaal; er gaat geen beeld naar de cloud.
+Your own lightweight camera system for home: records what happens, recognises people, vehicles and
+animals, sends notifications through Home Assistant and has its own web page for phone and laptop.
+Everything runs locally; no video goes to the cloud.
 
-- **Opnemen met de seconden ervoor**: een buffer van ± 10 s, zodat je ook ziet wie er aankwam.
-- **Herkennen** van personen, voertuigen en (optioneel) dieren, met filters tegen planten, schaduw
-  en geparkeerde auto's. Twijfelgevallen worden op het scherpe beeld nog eens nagekeken.
-- **Gezichten** leren herkennen (optioneel), ook "wie is dit?" vanuit een melding beantwoorden.
-- **Nederlandse kentekens** lezen (optioneel); bekende auto's krijgen een naam.
-- **Webpagina** met tijdlijn, zoeken ("pakket", een naam, een kenteken), dagoverzicht, live beeld,
-  maskers en zones tekenen, en "Niets aan de hand" om een vals alarm voortaan te negeren.
-- **Home Assistant** via MQTT: sensoren per camera, snapshots, een dagoverzicht en kant-en-klare
-  blueprints voor meldingen.
-- **Inloggen met een passkey** (Face ID / Touch ID) als je de pagina via HTTPS met een eigen
-  domein bereikbaar maakt.
+*Uitkijk* is Dutch for "lookout".
 
-![Licentie: AGPL-3.0](https://img.shields.io/badge/licentie-AGPL--3.0-blue)
+- **Recording with the seconds before**: a buffer of ~10 s, so you also see who was arriving.
+- **Detection** of people, vehicles and (optionally) animals, with filters against plants, shadows and
+  parked cars. Doubtful detections are double-checked on the sharp image.
+- **Faces** (optional): teach it who your housemates are, and answer "Who is this?" from a notification.
+- **Dutch licence plates** (optional); known cars get a name.
+- **Web page** with timeline, search ("package", a name, a plate), daily summary, live view, masks and
+  zones, and "Nothing to worry about" to ignore a false alarm from then on.
+- **Home Assistant** via MQTT: sensors per camera, snapshots, a daily summary and ready-made
+  blueprints for notifications.
+- **Log in with a passkey** (Face ID / Touch ID) when you make the page reachable over HTTPS with
+  your own domain.
 
-## Wat heb je nodig
+![Licence: AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue)
 
-- Een computer die altijd aan staat met **Docker** (een mini-pc, NAS met Docker, of een server).
-  Twee CPU-kernen en 2 GB geheugen is genoeg voor 3 camera's; met gezichtsherkenning liever 4 GB.
-  Een Intel-processor met iGPU helpt (hardware-decoding), maar is niet nodig.
-- **Camera's met RTSP**: o.a. Reolink, Foscam, Hikvision/Annke, Dahua/Amcrest, TP-Link Tapo/VIGI,
-  UniFi Protect. Bij voorkeur met een tweede, lage-resolutiestroom ("substream").
-- Optioneel: **Home Assistant** met de Mosquitto-broker (MQTT) voor meldingen.
+## What you need
 
-## Installeren
+- A computer that is always on with **Docker** (a mini PC, a NAS with Docker, or a server). Two CPU
+  cores and 2 GB of memory are enough for 3 cameras; with face recognition preferably 4 GB. An Intel
+  CPU with an iGPU helps (hardware decoding) but is not required.
+- **Cameras with RTSP**: e.g. Reolink, Foscam, Hikvision/Annke, Dahua/Amcrest, TP-Link Tapo/VIGI,
+  UniFi Protect. Preferably with a second, low-resolution stream ("substream").
+- Optional: **Home Assistant** with the Mosquitto broker (MQTT) for notifications.
+
+## Install
 
 ```bash
 git clone https://github.com/lexi1986/uitkijk.git
 cd uitkijk
 docker compose up -d
-docker compose logs camsvc | grep setupcode
+docker compose logs camsvc | grep "setup code"
 ```
 
-Open daarna `http://<ip-van-die-computer>:8080`. De **installatiewizard** vraagt om de setupcode
-uit het log en helpt je dan met:
+Then open `http://<ip-of-that-computer>:8080`. The **setup wizard** asks for the setup code from the
+log and then helps you with:
 
-1. **Camera's**: kies het merk, vul IP-adres en inloggegevens in en druk op **Test**: je ziet
-   meteen een beeld. Ander merk? Vul zelf het RTSP-adres in.
-2. **Home Assistant** (optioneel): adres en gebruiker van de MQTT-server, met een testknop.
-3. **Opties**: gezichtsherkenning, kentekens, live beeld.
-4. **Opslag**: hoe lang opnames bewaard blijven en hoeveel ruimte ze mogen gebruiken.
-5. **Adres**: hoe je de pagina opent, en eventueel een eigen domein voor HTTPS en passkeys.
+1. **Cameras**: pick the brand, enter IP address and login and press **Test**: you see an image right
+   away. Another brand? Enter the RTSP address yourself.
+2. **Home Assistant** (optional): address and user of the MQTT server, with a test button.
+3. **Options**: face recognition, licence plates, live view.
+4. **Storage**: how long recordings are kept and how much space they may use.
+5. **Address**: how you open the page, and optionally your own domain for HTTPS and passkeys.
 
-Na **Opslaan en starten** start de service opnieuw en zie je je camera's. De eerste keer duurt
-dat even langer als je gezichtsherkenning aanzette (± 500 MB aan modellen downloaden).
+After **Save and start** the service restarts and shows your cameras. The first start takes a bit
+longer when you enabled face recognition (~500 MB of models to download).
 
-Alles staat daarna in de map `data/` (instellingen, gezichten, kentekens) en `clips/` (opnames).
-Maak van `data/` af en toe een back-up. Instellingen per camera, maskers en zones pas je aan via
-**Beheer** op de webpagina; alle overige opties staan in [`config.example.yaml`](config.example.yaml).
+Everything then lives in the folders `data/` (settings, faces, plates) and `clips/` (recordings).
+Back up `data/` now and then. Per-camera settings, masks and zones are changed under **Manage** on
+the web page; all other options are listed in [`config.example.yaml`](config.example.yaml).
 
-### Bijwerken
+### Updating
 
 ```bash
 git pull && docker compose up -d --build
 ```
 
-### Zonder Docker (Proxmox-container)
+### Without Docker (Proxmox container)
 
-Er is ook een script dat een Debian-container op Proxmox aanmaakt en alles installeert, zie
-[`docs/HANDLEIDING.md`](docs/HANDLEIDING.md#stappenplan).
+There is also a script that creates a Debian container on Proxmox and installs everything, see
+[`docs/GUIDE.md`](docs/GUIDE.md#installing-on-proxmox-without-docker).
 
-## Home Assistant koppelen
+## Connecting Home Assistant
 
-1. Zorg dat de **MQTT-integratie** in Home Assistant aanstaat (met de Mosquitto-app) en vul die
-   gegevens in de wizard in. De camera's verschijnen vanzelf als apparaten, met sensoren zoals
-   `binary_sensor.cam_voordeur_persoon` en een snapshot-camera.
-2. Importeer de **blueprints** voor meldingen (Instellingen → Automatiseringen → Blueprints →
-   Blueprint importeren) met de link naar het bestand in deze repository:
+1. Make sure the **MQTT integration** is set up in Home Assistant (with the Mosquitto app) and enter
+   those details in the wizard. The cameras appear as devices by themselves, with sensors such as
+   `binary_sensor.cam_front_door_person` and a snapshot camera.
+2. Import the **blueprints** for notifications (Settings → Automations → Blueprints → Import
+   blueprint) with the link to the file in this repository:
 
-| Blueprint | Wat |
+| Blueprint | What |
 |---|---|
-| [persoon_melding](homeassistant/blueprints/automation/camera_service/persoon_melding.yaml) | Melding met foto als er een persoon is, met "Live bekijken" en "Opname" |
-| [aanbellen](homeassistant/blueprints/automation/camera_service/aanbellen.yaml) | Opname en melding bij aanbellen, met de naam als iemand herkend wordt |
-| [rondhangen](homeassistant/blueprints/automation/camera_service/rondhangen.yaml) | Dringende melding als een onbekende lang blijft staan |
-| [wie_is_dit](homeassistant/blueprints/automation/camera_service/wie_is_dit.yaml) | Onbekend gezicht een naam geven vanuit de melding |
-| [onbekende_auto](homeassistant/blueprints/automation/camera_service/onbekende_auto.yaml) | Onbekend kenteken 's nachts, of overdag na een kwartier |
-| [dagoverzicht](homeassistant/blueprints/automation/camera_service/dagoverzicht.yaml) | Samenvatting van de dag om 22:00 |
-| [aanwezigheid](homeassistant/blueprints/automation/camera_service/aanwezigheid.yaml) | Geen alarm als een bewoner net thuiskomt |
-| [servergezondheid](homeassistant/blueprints/automation/camera_service/servergezondheid.yaml) | Melding bij een crash, volle schijf of offline camera |
+| [person_alert](homeassistant/blueprints/automation/uitkijk/person_alert.yaml) | Notification with photo when there is a person, with "Watch live" and "Recording" |
+| [doorbell](homeassistant/blueprints/automation/uitkijk/doorbell.yaml) | Recording and notification on a doorbell ring, with the name when someone is recognised |
+| [loitering](homeassistant/blueprints/automation/uitkijk/loitering.yaml) | Urgent notification when an unknown person stays for a long time |
+| [who_is_this](homeassistant/blueprints/automation/uitkijk/who_is_this.yaml) | Name an unknown face from the notification |
+| [unknown_vehicle](homeassistant/blueprints/automation/uitkijk/unknown_vehicle.yaml) | Unknown plate at night, or during the day after 15 minutes |
+| [daily_summary](homeassistant/blueprints/automation/uitkijk/daily_summary.yaml) | Summary of the day at 22:00 |
+| [presence](homeassistant/blueprints/automation/uitkijk/presence.yaml) | No alarm when a resident just arrived home |
+| [server_health](homeassistant/blueprints/automation/uitkijk/server_health.yaml) | Notification on a crash, full disk or offline camera |
 
-Bij "Meldingsdiensten" vul je de notify-actie van je telefoon in, bijv.
-`notify.mobile_app_iphone_van_sam` (te vinden onder Ontwikkelaarshulpmiddelen → Acties).
+For "Notification services" enter your phone's notify action, e.g.
+`notify.mobile_app_sams_iphone` (found under Developer tools → Actions).
 
-## Van buitenaf en inloggen
+## Access from outside and login
 
-Zonder eigen domein is de webpagina open voor iedereen op je thuisnetwerk. Wil je er ook buiten
-de deur bij, zet er dan een reverse proxy met HTTPS voor (Caddy, Nginx Proxy Manager, Traefik) of
-gebruik een VPN (Tailscale, WireGuard). Vul in de wizard je domein in; dan moet je inloggen met
-een **passkey**. De eenmalige koppelcode voor de eerste passkey staat in het log. Zet poort 8080
-nooit zonder zo'n beveiliging open op internet.
+Without your own domain the web page is open to everyone on your home network. To use it away from
+home, put a reverse proxy with HTTPS in front (Caddy, Nginx Proxy Manager, Traefik) or use a VPN
+(Tailscale, WireGuard). Enter your domain in the wizard; then you log in with a **passkey**. The
+one-time pairing code for the first passkey is in the log. Never expose port 8080 to the internet
+without such protection.
 
 ## Privacy
 
-- Beelden, gezichten en kentekens blijven op je eigen computer.
-- Film je de openbare weg of de buren, dan gelden de privacyregels (in Nederland de AVG): richt
-  camera's zoveel mogelijk op je eigen terrein, gebruik maskers voor de rest en bewaar opnames
-  niet langer dan nodig. Gezichtsherkenning van anderen dan je huisgenoten is daarbij extra gevoelig.
-- Optioneel kan een **lokaal** AI-model (Ollama) beschrijvingen bij opnames maken; zie de handleiding.
+- Images, faces and plates stay on your own computer.
+- If you film the public road or the neighbours, privacy rules apply (in the EU the GDPR): point
+  cameras at your own property as much as possible, mask the rest, and do not keep recordings longer
+  than needed. Recognising faces of anyone other than your housemates is especially sensitive.
+- Optionally a **local** AI model (Ollama) can describe recordings; see the guide.
 
-## Licentie
+## Licence
 
-AGPL-3.0, zie [`LICENSE`](LICENSE). Je mag het gebruiken, aanpassen en delen; wie een aangepaste
-versie verspreidt of als dienst aanbiedt, moet de broncode ook beschikbaar maken. De gebruikte
-modellen hebben hun eigen licenties, zie [`MODELLEN.md`](MODELLEN.md). Het gezichtsmodel van
-InsightFace is alleen voor niet-commercieel gebruik.
+AGPL-3.0, see [`LICENSE`](LICENSE). You may use, change and share it; whoever distributes a modified
+version or offers it as a service must make the source code available too. The models have their own
+licences, see [`MODELS.md`](MODELS.md). The InsightFace face model is for non-commercial use only.
 
-Meer details (alle opties, API, hardwareversnelling, Coral, AI-beschrijvingen):
-[`docs/HANDLEIDING.md`](docs/HANDLEIDING.md).
+More details (all options, API, hardware acceleration, Coral, AI descriptions):
+[`docs/GUIDE.md`](docs/GUIDE.md).

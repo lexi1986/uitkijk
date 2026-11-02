@@ -1,0 +1,68 @@
+blueprint:
+  name: Uitkijk – unknown person loitering
+  description: >-
+    Urgent notification (breaks through Focus) when Uitkijk sees an unrecognised person at a camera
+    for longer than the configured time. Probable false alarms and residents who just arrived home
+    already do not count.
+  domain: automation
+  author: Uitkijk
+  source_url: https://github.com/lexi1986/uitkijk/blob/main/homeassistant/blueprints/automation/uitkijk/loitering.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    sensors:
+      name: Loitering sensors
+      description: binary_sensor.cam_<name>_loitering from Uitkijk
+      selector:
+        entity:
+          domain: binary_sensor
+          integration: mqtt
+          multiple: true
+    notify_targets:
+      name: Notification services
+      description: E.g. notify.mobile_app_sams_iphone
+      selector:
+        text:
+          multiple: true
+    app_url:
+      name: Address of the Uitkijk web page
+      selector:
+        text:
+          type: url
+
+mode: parallel
+max: 5
+
+variables:
+  targets: !input notify_targets
+  app: !input app_url
+
+triggers:
+  - trigger: state
+    entity_id: !input sensors
+    to: "on"
+
+actions:
+  - variables:
+      cam: "{{ trigger.entity_id | replace('binary_sensor.cam_', '') | replace('_loitering', '') }}"
+      cam_name: "{{ state_attr(trigger.entity_id, 'friendly_name') | replace(' Loitering', '') }}"
+  - repeat:
+      for_each: "{{ targets }}"
+      sequence:
+        - action: "{{ repeat.item }}"
+          data:
+            title: "⚠️ {{ cam_name }}: unknown person loitering"
+            message: "{{ now().strftime('%H:%M') }} – someone unrecognised has been in view for a while."
+            data:
+              image: "/api/camera_proxy/camera.cam_{{ cam }}_snapshot"
+              url: "{{ app }}/?live={{ cam }}"
+              group: camera-loitering
+              push:
+                interruption-level: time-sensitive
+              actions:
+                - action: URI
+                  title: Watch live
+                  uri: "{{ app }}/?live={{ cam }}"
+                - action: URI
+                  title: Recording
+                  uri: "{{ app }}/?camera={{ cam }}&open=latest"

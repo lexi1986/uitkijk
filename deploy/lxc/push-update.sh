@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Draai dit op de Proxmox-HOST om een bestaande container bij te werken met de code uit deze map
-# (na bijv. `scp -r camera-service root@proxmox:/root/`). Config, clips en model blijven staan.
+# Run this on the Proxmox HOST to update an existing container with the code from this folder
+# (after e.g. `rsync -a ./ root@proxmox:/root/camera-service/`). Config, clips and model stay.
 #
 #   CTID=123 bash /root/camera-service/deploy/lxc/push-update.sh
 set -euo pipefail
 
 CTID="${CTID:?Zet CTID=<nummer van de camera-service-container>}"
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-command -v pct >/dev/null || { echo "Dit script moet op een Proxmox-host draaien." >&2; exit 1; }
+command -v pct >/dev/null || { echo "This script must run on a Proxmox host." >&2; exit 1; }
 
 TARBALL="$(mktemp --suffix=.tar.gz)"
 trap 'rm -f "$TARBALL"' EXIT

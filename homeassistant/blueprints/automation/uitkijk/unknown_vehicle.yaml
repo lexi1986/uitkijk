@@ -1,0 +1,67 @@
+blueprint:
+  name: Uitkijk – unknown vehicle
+  description: >-
+    Notification when Uitkijk reads a licence plate that is not known: at night immediately, during
+    the day only when the vehicle is still there after 15 minutes. Name known plates on the web page.
+  domain: automation
+  author: Uitkijk
+  source_url: https://github.com/lexi1986/uitkijk/blob/main/homeassistant/blueprints/automation/uitkijk/unknown_vehicle.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    event_entity:
+      name: Event entity of the camera
+      description: event.cam_<name>_event of the camera with plate recognition
+      selector:
+        entity:
+          domain: event
+          integration: mqtt
+    notify_targets:
+      name: Notification services
+      selector:
+        text:
+          multiple: true
+    app_url:
+      name: Address of the Uitkijk web page
+      selector:
+        text:
+          type: url
+
+mode: queued
+max: 5
+
+variables:
+  targets: !input notify_targets
+  app: !input app_url
+  ev: !input event_entity
+  cam: "{{ ev | replace('event.cam_', '') | replace('_event', '') }}"
+
+triggers:
+  - trigger: state
+    entity_id: !input event_entity
+    not_to: ["unavailable", "unknown"]
+
+conditions:
+  - "{{ trigger.to_state.attributes.event_type == 'unknown_vehicle' }}"
+
+actions:
+  - variables:
+      a: "{{ trigger.to_state.attributes }}"
+  - repeat:
+      for_each: "{{ targets }}"
+      sequence:
+        - action: "{{ repeat.item }}"
+          data:
+            title: "🚗 Unknown vehicle"
+            message: "{{ a.plate }} – {{ 'has been there for ' ~ a.minutes ~ ' minutes' if a.reason == 'parked' else 'seen at ' ~ now().strftime('%H:%M') }}"
+            data:
+              image: "/api/camera_proxy/camera.cam_{{ cam }}_snapshot"
+              url: "{{ app }}/?camera={{ cam }}&open=latest"
+              tag: "uitkijk-vehicle-{{ a.plate }}"
+              actions:
+                - action: URI
+                  title: Recording
+                  uri: "{{ app }}/?camera={{ cam }}&open=latest"
+                - action: URI
+                  title: Watch live
+                  uri: "{{ app }}/?live={{ cam }}"

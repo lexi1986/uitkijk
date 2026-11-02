@@ -16,7 +16,7 @@ from camsvc.retention import cleanup
 
 @pytest.fixture(scope="session")
 def sample_video(tmp_path_factory) -> Path:
-    """30 s H.264 + AAC, keyframe elke 2 s (zoals een IP-camera)."""
+    """30 s H.264 + AAC, keyframe every 2 s (like an IP camera)."""
     out = tmp_path_factory.mktemp("media") / "sample.mp4"
     subprocess.run([
         "ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=15",
@@ -28,7 +28,7 @@ def sample_video(tmp_path_factory) -> Path:
 
 @pytest.fixture(scope="session")
 def g711_video(tmp_path_factory) -> Path:
-    """Zoals een Foscam-deurbel: H.264 + G.711 (A-law) 8 kHz mono."""
+    """Like a Foscam doorbell: H.264 + G.711 (A-law) 8 kHz mono."""
     out = tmp_path_factory.mktemp("media") / "g711.mkv"
     subprocess.run([
         "ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=15",
@@ -57,7 +57,7 @@ def test_ring_keeps_pre_seconds_from_keyframe(sample_video):
         for p in c.demux():
             if p.size == 0 or p.pts is None:
                 continue
-            t = float(p.pts * p.time_base)       # gesimuleerde aankomsttijd
+            t = float(p.pts * p.time_base)       # simulated arrival time
             ring.add(p.stream.index, bytes(p), p.pts, p.dts,
                      p.stream.index == v.index and p.is_keyframe, t)
     assert ring.packets[0].is_keyframe
@@ -77,7 +77,7 @@ def test_clip_writer_stream_copy(sample_video, tmp_path):
             t = float(p.pts * p.time_base)
             bp = ring.add(p.stream.index, bytes(p), p.pts, p.dts,
                           p.stream.index == v.index and p.is_keyframe, t)
-            if writer is None and t >= 15:          # event op t=15
+            if writer is None and t >= 15:          # event at t=15
                 writer = ClipWriter(out, streams, v.index)
                 for old in ring.snapshot():
                     writer.write(old)
@@ -112,13 +112,13 @@ def test_motion_and_mask():
     md = MotionDetector(threshold=25, min_area=0.004, polygons=[[[0, 0], [50, 0], [50, 100], [0, 100]]])
     bg = np.zeros((180, 320), np.uint8)
     assert md.detect(bg) == 0.0
-    # beweging links (gemaskeerd) telt niet
+    # motion on the left (masked) does not count
     left = bg.copy(); left[50:100, 20:80] = 255
     assert not md.is_motion(md.detect(left))
-    # beweging rechts telt wel
+    # motion on the right does count
     right = bg.copy(); right[50:100, 220:280] = 255
     assert md.is_motion(md.detect(right))
-    # lichtomslag over het hele beeld telt niet
+    # light change over the whole frame does not count
     assert md.detect(np.full((180, 320), 200, np.uint8)) == 0.0
 
     mask = build_mask([[[0, 0], [50, 0], [50, 100], [0, 100]]], 100, 100)
@@ -136,7 +136,7 @@ def test_retention_age_and_size(tmp_path):
             f.write_bytes(b"x" * (size if ext == ".mp4" else 10))
             os.utime(f, (mtime, mtime))
     removed, _ = cleanup(tmp_path, max_days=7, max_gb=0.7 / 1024)  # ~0.73 MB
-    assert removed == 2                          # a (te oud) en b (te groot, oudste)
+    assert removed == 2                          # a (too old) and b (too large, oldest)
     assert sorted(p.name for p in d.iterdir()) == ["c.json", "c.mp4"]
 
 
@@ -149,12 +149,12 @@ cameras:
     sub_url: rtsp://x/sub
     post_seconds: 20
     objects:
-      labels: {dier: true}
+      labels: {animal: true}
 """)
     cfg = load_config(cfg_file)
     cam = cfg.cameras[0]
     assert cam.post_seconds == 20 and cam.pre_seconds == 10
-    assert set(cam.enabled_labels()) == {"persoon", "voertuig", "dier"}
+    assert set(cam.enabled_labels()) == {"person", "vehicle", "animal"}
     assert cfg.retention_days == 7 and cfg.retention_max_gb == 25
 
 
@@ -165,22 +165,22 @@ def test_parked_car_stops_triggering():
 
     cam = SimpleNamespace(cfg=SimpleNamespace(objects={"stationary_seconds": 30}), _tracks=[])
     cam._part_of_parked = lambda n, d, lim: Camera._part_of_parked(cam, n, d, lim)
-    drop = lambda now, dets: Camera._drop_stationary(cam, now, dets, ["persoon", "voertuig"])
-    car = Detection("voertuig", 0.7, (100, 100, 300, 250))
-    jitter = Detection("voertuig", 0.7, (103, 98, 302, 252))
-    person = Detection("persoon", 0.8, (400, 100, 450, 250))
+    drop = lambda now, dets: Camera._drop_stationary(cam, now, dets, ["person", "vehicle"])
+    car = Detection("vehicle", 0.7, (100, 100, 300, 250))
+    jitter = Detection("vehicle", 0.7, (103, 98, 302, 252))
+    person = Detection("person", 0.8, (400, 100, 450, 250))
 
-    assert drop(0, [car]) == [car]               # net verschenen: telt mee
-    assert drop(10, [jitter]) == [jitter]        # nog geen 30 s
-    assert drop(40, [car, person]) == [person]   # auto staat stil, persoon telt altijd
-    moved = Detection("voertuig", 0.7, (250, 100, 450, 250))
-    assert drop(45, [moved]) == [moved]          # rijdt weg: telt weer mee
-    # 's nachts lange tijd niet herkend (zekerheid onder de drempel): niet vergeten
+    assert drop(0, [car]) == [car]               # just appeared: counts
+    assert drop(10, [jitter]) == [jitter]        # not 30 s yet
+    assert drop(40, [car, person]) == [person]   # car stands still, person always counts
+    moved = Detection("vehicle", 0.7, (250, 100, 450, 250))
+    assert drop(45, [moved]) == [moved]          # drives away: counts again
+    # not detected for a long time at night (confidence below threshold): do not forget
     for t in range(50, 3000, 2):
         drop(t, [])
-    assert drop(3000, [car]) == []               # nog steeds stilstaand, geen event
-    drop(3000 + 3700, [])                        # > 1 uur niet gezien: vergeten
-    assert drop(3000 + 3701, [car]) == [car]     # en daarna weer 'nieuw'
+    assert drop(3000, [car]) == []               # still stationary, no event
+    drop(3000 + 3700, [])                        # not seen for > 1 hour: forgotten
+    assert drop(3000 + 3701, [car]) == [car]     # and 'new' again afterwards
 
 
 def test_grab_frame_decodes_newest_main_frame(sample_video):
@@ -202,7 +202,7 @@ FACE_MODELS = Path(os.environ.get("CAMSVC_FACE_MODELS", "models"))
 
 
 @pytest.mark.skipif(not (FACE_MODELS / "face_recognition_sface_2021dec.onnx").exists(),
-                    reason="gezichtsmodellen niet aanwezig (CAMSVC_FACE_MODELS)")
+                    reason="face models not present (CAMSVC_FACE_MODELS)")
 def test_face_learn_and_recognise(tmp_path):
     import cv2
     from camsvc.faces import FaceRecognizer, valid_name
@@ -235,13 +235,13 @@ def test_stationary_tracks_survive_restart(tmp_path):
     from camsvc.camera import Camera, Track
 
     f = tmp_path / "stationary_carport.json"
-    before = SimpleNamespace(name="carport", _tracks=[Track("voertuig", (1, 2, 3, 4), 100.0, 390.0)],
+    before = SimpleNamespace(name="carport", _tracks=[Track("vehicle", (1, 2, 3, 4), 100.0, 390.0)],
                              _tracks_file=f, _tracks_saved=0.0)
-    Camera._save_tracks(before, 400.0)                  # staat al 300 s stil
+    Camera._save_tracks(before, 400.0)                  # stationary for 300 s already
     after = SimpleNamespace(name="carport", _tracks=[], _tracks_file=f, _lock=threading.Lock())
     Camera._load_tracks(after)
     t = after._tracks[0]
-    assert t.label == "voertuig" and t.box == (1, 2, 3, 4)
+    assert t.label == "vehicle" and t.box == (1, 2, 3, 4)
     assert 299 <= time.monotonic() - t.first_seen <= 302
     assert 9 <= time.monotonic() - t.last_seen <= 12
 
@@ -262,38 +262,38 @@ def test_normalize_nl_plates():
     assert normalize_nl("gkb-31-r") == "GKB-31-R"
     assert normalize_nl("12XKB7") == "12-XKB-7"            # sidecode 7
     assert normalize_nl("TN321B") == "TN-321-B"            # sidecode 9
-    assert normalize_nl("123456") is None                  # zou 2 correcties nodig hebben
-    assert normalize_nl("6KB31R") == "GKB-31-R"            # 6 op een letterplek -> G
-    assert normalize_nl("ZBO7LP") == "ZB-07-LP"            # O op een cijferplek -> 0
-    assert normalize_nl("5AU5341") is None                 # 7 tekens: geen NL-kenteken
+    assert normalize_nl("123456") is None                  # would need 2 corrections
+    assert normalize_nl("6KB31R") == "GKB-31-R"            # 6 in a letter position -> G
+    assert normalize_nl("ZBO7LP") == "ZB-07-LP"            # O in a digit position -> 0
+    assert normalize_nl("5AU5341") is None                 # 7 characters: not a Dutch plate
     assert normalize_nl("") is None
     assert valid_plate("GKB-31-R") and not valid_plate("GKB31R")
 
 
 def test_event_search_text_and_matching(tmp_path):
     from camsvc.events import EventStore
-    data = {"camera": "carport", "labels": ["voertuig", "persoon"],
+    data = {"camera": "carport", "labels": ["vehicle", "person"],
             "faces": [{"name": "Sam"}], "plates": [{"plate": "GKB-31-R"}],
-            "ai": {"status": "ok", "beschrijving": "Een bezorger met een pakket.", "objecten": ["bestelbus"],
-                   "kenmerken": ["witte bestelbus", "oranje hesje"]}}
+            "ai": {"status": "ok", "description": "A courier with a package.", "objects": ["delivery van"],
+                   "attributes": ["white van", "orange vest"]}}
     js = tmp_path / "e.json"
     js.write_text(json.dumps(data))
     store = EventStore(tmp_path, "")
-    names = {"GKB-31-R": "Onze auto"}
-    for q in ("pakket", "sam", "gkb31r", "GKB-31-R", "onze", "witte bestelbus", "oranje carport"):
+    names = {"GKB-31-R": "Our car"}
+    for q in ("package", "sam", "gkb31r", "GKB-31-R", "our", "white van", "orange carport"):
         assert store._matches(js, q.lower().split(), names), q
-    assert not store._matches(js, ["kat"], names)
-    assert not store._matches(js, ["pakket", "kat"], names)        # alle woorden moeten passen
+    assert not store._matches(js, ["cat"], names)
+    assert not store._matches(js, ["package", "cat"], names)        # all words must match
 
 
 def test_motion_region_zooms_on_small_motion():
     from camsvc.motion import motion_region
-    # kleine beweging rechtsonder in een 320x180-bewegingsbeeld, sub-stream 640x360
+    # small motion bottom right in a 320x180 motion frame, sub stream 640x360
     r = motion_region((280, 150, 10, 20, 320, 180), (360, 640))
     x0, y0, x1, y1 = r
-    assert x1 - x0 == y1 - y0 >= 126 and x1 <= 640 and y1 <= 360    # vierkant, binnen beeld
-    assert x0 <= 570 <= x1 and y0 <= 330 <= y1                       # bevat de beweging
-    assert motion_region((0, 0, 300, 170, 320, 180), (360, 640)) is None   # groot: heel beeld
+    assert x1 - x0 == y1 - y0 >= 126 and x1 <= 640 and y1 <= 360    # square, inside the frame
+    assert x0 <= 570 <= x1 and y0 <= 330 <= y1                       # contains the motion
+    assert motion_region((0, 0, 300, 170, 320, 180), (360, 640)) is None   # large: whole frame
 
 
 def test_motion_detector_remembers_moving_area():
@@ -310,14 +310,14 @@ def test_retention_per_label(tmp_path):
     d = tmp_path / "deurbel" / "2026-10-01"
     d.mkdir(parents=True)
     old = time.time() - 20 * 86400
-    for name in ("101010_persoon", "111111_voertuig", "121212_persoon.face1"):
+    for name in ("101010_person", "111111_vehicle", "121212_person.face1"):
         for ext in (".mp4",) if "face" not in name else (".jpg",):
             f = d / f"{name}{ext}"
             f.write_bytes(b"x")
             os.utime(f, (old, old))
-    removed, _ = cleanup(tmp_path, max_days=7, max_gb=10, days_by_label={"persoon": 30})
+    removed, _ = cleanup(tmp_path, max_days=7, max_gb=10, days_by_label={"person": 30})
     assert removed == 1
-    assert sorted(p.name for p in d.iterdir()) == ["101010_persoon.mp4", "121212_persoon.face1.jpg"]
+    assert sorted(p.name for p in d.iterdir()) == ["101010_person.mp4", "121212_person.face1.jpg"]
 
 
 def test_verify_borderline_detections():
@@ -328,21 +328,21 @@ def test_verify_borderline_detections():
     from camsvc.detector import Detection
 
     crops = []
-    det = SimpleNamespace(detect=lambda img, labels, s: crops.append(img.shape) or [Detection("persoon", 0.9, (0, 0, 9, 9))])
+    det = SimpleNamespace(detect=lambda img, labels, s: crops.append(img.shape) or [Detection("person", 0.9, (0, 0, 9, 9))])
     main = np.zeros((2160, 3840, 3), np.uint8)
-    assert zoom_score(main, (300, 100, 320, 160), (360, 640), det, "persoon") == 0.9
+    assert zoom_score(main, (300, 100, 320, 160), (360, 640), det, "person") == 0.9
     assert crops[-1][:2] == (576, 576)               # 60 px hoog x 6 x 1.6
 
     now = 1000.0
     cam = SimpleNamespace(cfg=SimpleNamespace(objects={"verify_below": 0.75}), _lock=threading.Lock(),
-                          _verdicts=[Verdict("persoon", (0, 0, 20, 100), now + 60, False),
-                                     Verdict("persoon", (300, 50, 340, 200), now + 60, True)],
+                          _verdicts=[Verdict("person", (0, 0, 20, 100), now + 60, False),
+                                     Verdict("person", (300, 50, 340, 200), now + 60, True)],
                           _verify_busy=True)
-    sure = Detection("persoon", 0.9, (500, 50, 540, 200))
-    pipe = Detection("persoon", 0.62, (1, 0, 21, 100))        # eerder afgewezen plek
-    walker = Detection("persoon", 0.6, (310, 55, 350, 205))   # bevestigd, iets verplaatst
-    new = Detection("persoon", 0.6, (100, 100, 140, 250))     # wacht op controle
-    car = Detection("voertuig", 0.6, (100, 100, 200, 200))
+    sure = Detection("person", 0.9, (500, 50, 540, 200))
+    pipe = Detection("person", 0.62, (1, 0, 21, 100))        # previously rejected spot
+    walker = Detection("person", 0.6, (310, 55, 350, 205))   # confirmed, moved slightly
+    new = Detection("person", 0.6, (100, 100, 140, 250))     # waiting for verification
+    car = Detection("vehicle", 0.6, (100, 100, 200, 200))
     kept = Camera._verify(cam, now, [sure, pipe, walker, new, car], (360, 640))
     assert kept == [sure, walker, car]
     cam.cfg.objects["verify_below"] = 0
@@ -355,32 +355,32 @@ def test_sunlit_side_of_parked_car_is_not_new():
     from camsvc.detector import Detection
 
     now = 10_000.0
-    parked = Track("voertuig", (152, 49, 416, 288), now - 3600, now - 90)
+    parked = Track("vehicle", (152, 49, 416, 288), now - 3600, now - 90)
     cam = SimpleNamespace(cfg=SimpleNamespace(objects={"stationary_seconds": 30}), _tracks=[parked])
     cam._part_of_parked = lambda n, d, lim: Camera._part_of_parked(cam, n, d, lim)
-    side = Detection("voertuig", 0.91, (385, 73, 414, 207))          # zonnige zijkant (echte box)
-    shadow = Detection("voertuig", 0.8, (150, 45, 420, 300))         # auto + schaduw
-    other = Detection("voertuig", 0.9, (420, 20, 600, 120))          # andere auto op straat
-    moving = Camera._drop_stationary(cam, now, [side, shadow, other], ["voertuig"])
+    side = Detection("vehicle", 0.91, (385, 73, 414, 207))          # sunlit side (real box)
+    shadow = Detection("vehicle", 0.8, (150, 45, 420, 300))         # car + shadow
+    other = Detection("vehicle", 0.9, (420, 20, 600, 120))          # another car on the street
+    moving = Camera._drop_stationary(cam, now, [side, shadow, other], ["vehicle"])
     assert moving == [other] and parked.last_seen == now
-    # auto weg en pas na lange tijd terug: dan telt het gewoon als nieuw
+    # car gone and back only after a long time: counts as new
     parked.last_seen = now - 2000
-    assert Camera._drop_stationary(cam, now, [side], ["voertuig"]) == [side]
+    assert Camera._drop_stationary(cam, now, [side], ["vehicle"]) == [side]
 
 
 def test_parked_car_refreshed_while_quiet():
-    """Een uur geen beweging: de geparkeerde auto wordt in rust nageteld, zodat een
-    langsrijdende auto die door de ruiten te zien is daarna niet als nieuw telt."""
+    """An hour without motion: the parked car is re-checked while idle, so a passing car seen
+    through its windows afterwards does not count as new."""
     import threading
     from types import SimpleNamespace
     from camsvc.camera import Camera, Track
     from camsvc.detector import Detection
 
     now = 10_000.0
-    parked = Track("voertuig", (147, 48, 416, 292), now - 16000, now - 3400)
-    gone = Track("voertuig", (420, 20, 600, 120), now - 16000, now - 3400)
+    parked = Track("vehicle", (147, 48, 416, 292), now - 16000, now - 3400)
+    gone = Track("vehicle", (420, 20, 600, 120), now - 16000, now - 3400)
     detector = SimpleNamespace(detect=lambda bgr, labels, score: [
-        Detection("voertuig", 0.9, (150, 50, 415, 290))])
+        Detection("vehicle", 0.9, (150, 50, 415, 290))])
     cam = SimpleNamespace(cfg=SimpleNamespace(objects={"enabled": True, "min_score": 0.5,
                                                        "stationary_seconds": 30},
                                               motion={"cooldown_seconds": 5}),
@@ -392,8 +392,8 @@ def test_parked_car_refreshed_while_quiet():
     Camera._refresh_parked(cam, now, None)
     assert parked.last_seen == now and gone.last_seen == now - 3400
     assert not Camera._refresh_due(cam, now + 10)
-    window = Detection("voertuig", 0.9, (349, 51, 414, 167))        # echte box van 15:57
-    assert Camera._drop_stationary(cam, now + 20, [window], ["voertuig"]) == []
+    window = Detection("vehicle", 0.9, (349, 51, 414, 167))        # real box from 15:57
+    assert Camera._drop_stationary(cam, now + 20, [window], ["vehicle"]) == []
 
 
 def test_zones_validate_and_hit():
@@ -402,12 +402,12 @@ def test_zones_validate_and_hit():
     zones = validate_zones([{"name": " Oprit ", "points": [[0, 50], [50, 50], [50, 100], [0, 100]]},
                             {"name": "Voordeur", "points": [[50, 0], [100, 0], [100, 100]]}])
     assert zones[0]["name"] == "Oprit"
-    assert zones_at(zones, 640, 360, 100, 300) == ["Oprit"]          # linksonder
+    assert zones_at(zones, 640, 360, 100, 300) == ["Oprit"]          # bottom left
     assert zones_at(zones, 640, 360, 600, 50) == ["Voordeur"]
     assert zones_at(zones, 640, 360, 100, 50) == []
     for bad in ([{"name": "", "points": [[0, 0], [1, 1], [2, 0]]}],
                 [{"name": "a", "points": [[0, 0], [1, 1], [2, 0]]}, {"name": "A", "points": [[0, 0], [1, 1], [2, 0]]}],
-                [{"name": "x", "points": [[0, 0], [1, 1]]}], "geen lijst"):
+                [{"name": "x", "points": [[0, 0], [1, 1]]}], "not a list"):
         with pytest.raises(ValueError):
             validate_zones(bad)
 
@@ -427,17 +427,17 @@ def test_unknown_plate_alerts():
                           mqtt=SimpleNamespace(publish_alert=lambda c, t, d: sent.append(d)),
                           store=SimpleNamespace(public_url="http://x"))
     ev = lambda h: SimpleNamespace(start_wall=datetime(2026, 11, 2, h, 0).astimezone(), vehicle_box=(10, 10, 200, 150))
-    rows = [{"plate": "GKS-31-R", "name": None, "crop": "a.jpg"},     # eigen auto, één teken mis
+    rows = [{"plate": "GKS-31-R", "name": None, "crop": "a.jpg"},     # own car, one character misread
             {"plate": "XX-123-B", "name": None, "crop": "b.jpg"}]
     Camera._check_unknown_plates(cam, ev(23), rows)
-    assert [d["plate"] for d in sent] == ["XX-123-B"] and sent[0]["reden"] == "nacht"
+    assert [d["plate"] for d in sent] == ["XX-123-B"] and sent[0]["reason"] == "night"
     Camera._check_unknown_plates(cam, ev(14), rows)
     assert len(sent) == 1 and [w["plate"] for w in cam._plate_watch] == ["XX-123-B"]
     cam.latest_bgr = np.zeros((360, 640, 3), np.uint8)
     cam.cfg = SimpleNamespace(objects={"min_score": 0.5})
-    cam.detector = SimpleNamespace(detect=lambda *a: [Detection("voertuig", 0.9, (12, 12, 198, 150))])
+    cam.detector = SimpleNamespace(detect=lambda *a: [Detection("vehicle", 0.9, (12, 12, 198, 150))])
     Camera._check_parked(cam, cam._plate_watch)
-    assert sent[-1]["reden"] == "geparkeerd" and sent[-1]["plate"] == "XX-123-B"
+    assert sent[-1]["reason"] == "parked" and sent[-1]["plate"] == "XX-123-B"
 
 
 def test_day_summary(tmp_path):
@@ -447,21 +447,21 @@ def test_day_summary(tmp_path):
     day = tmp_path / "deurbel" / "2026-11-02"
     day.mkdir(parents=True)
     rows = [
-        {"camera": "deurbel", "label": "aanbellen", "labels": ["aanbellen", "persoon"], "start": "2026-11-02T10:05:00+01:00",
-         "faces": [{"name": None}], "ai": {"status": "ok", "kenmerken": ["bruin pakket"], "objecten": ["persoon"]}},
-        {"camera": "deurbel", "label": "persoon", "labels": ["persoon"], "start": "2026-11-02T15:42:00+01:00",
+        {"camera": "deurbel", "label": "doorbell", "labels": ["doorbell", "person"], "start": "2026-11-02T10:05:00+01:00",
+         "faces": [{"name": None}], "ai": {"status": "ok", "attributes": ["brown package"], "objects": ["person"]}},
+        {"camera": "deurbel", "label": "person", "labels": ["person"], "start": "2026-11-02T15:42:00+01:00",
          "faces": [{"name": "Sam"}]},
-        {"camera": "deurbel", "label": "voertuig", "labels": ["voertuig"], "start": "2026-11-02T16:00:00+01:00",
+        {"camera": "deurbel", "label": "vehicle", "labels": ["vehicle"], "start": "2026-11-02T16:00:00+01:00",
          "plates": [{"plate": "GKS-31-R"}, {"plate": "XX-123-B"}]},
     ]
     for i, r in enumerate(rows):
         (day / f"{i}.json").write_text(json.dumps(r))
     s = summarize_day(tmp_path, date(2026, 11, 2), {"GKB-31-R": "Family car"})
-    assert s["events"] == 3 and s["aanbellen"] == 1 and s["pakketten"] == 1 and s["onbekende_personen"] == 1
-    assert s["personen"] == {"Sam": {"aantal": 1, "eerst": "15:42", "laatst": "15:42"}}
-    assert s["tekst"] == ("3 opnames. 1× aangebeld. 1 pakketje. 2× een persoon: Sam (1×, eerst 15:42), "
-                          "1× onbekend gezicht. Auto's: Family car, onbekend XX-123-B.")
-    assert summarize_day(tmp_path, date(2026, 11, 3))["tekst"] == "Niets opgenomen vandaag."
+    assert s["events"] == 3 and s["doorbell"] == 1 and s["packages"] == 1 and s["unknown_faces"] == 1
+    assert s["people"] == {"Sam": {"count": 1, "first": "15:42", "last": "15:42"}}
+    assert s["text"] == ("3 recordings. Doorbell rang 1×. 1 package. 2× a person: Sam (1×, first 15:42), "
+                          "1× unknown face. Vehicles: Family car, unknown XX-123-B.")
+    assert summarize_day(tmp_path, date(2026, 11, 3))["text"] == "Nothing recorded today."
 
 
 def test_likely_resident_after_arrival():
@@ -472,10 +472,10 @@ def test_likely_resident_after_arrival():
     now = _t.monotonic()
     cam = SimpleNamespace(arrivals={"Alex": now - 60, "Sam": now - 4000}, bodies=None, name="hek")
     cam._recent_arrivals = lambda n: Camera._recent_arrivals(cam, n)
-    ev = SimpleNamespace(labels={"persoon"}, start_mono=now, body_emb=None, max_persons=1)
+    ev = SimpleNamespace(labels={"person"}, start_mono=now, body_emb=None, max_persons=1)
     assert Camera._likely_residents(cam, ev, [{"name": None}]) == ["Alex"]
-    assert Camera._likely_residents(cam, ev, [{"name": "Sam"}]) is None          # gezicht herkend
-    assert Camera._likely_residents(cam, SimpleNamespace(labels={"voertuig"}, start_mono=now, body_emb=None), []) is None
+    assert Camera._likely_residents(cam, ev, [{"name": "Sam"}]) is None          # face recognised
+    assert Camera._likely_residents(cam, SimpleNamespace(labels={"vehicle"}, start_mono=now, body_emb=None), []) is None
     cam.arrivals.clear()
     assert Camera._likely_residents(cam, ev, []) is None
 
@@ -489,21 +489,21 @@ def test_clothing_remembered_and_matched(tmp_path):
     v = lambda *xs: np.array(xs + (0.0,) * (4 - len(xs)), np.float32) / np.linalg.norm(xs)
     m = BodyMatcher.__new__(BodyMatcher)
     import threading
-    m._lock, m._file, m._seen = threading.Lock(), tmp_path / "kleding.json", {}
+    m._lock, m._file, m._seen = threading.Lock(), tmp_path / "clothing.json", {}
     now = _t.monotonic()
     cam = SimpleNamespace(arrivals={}, bodies=m, name="hek")
     cam._recent_arrivals = lambda n: Camera._recent_arrivals(cam, n)
-    # gezicht herkend bij de deurbel: kleding onthouden
-    seen = SimpleNamespace(labels={"persoon"}, start_mono=now, body_emb=v(1, 0.1), max_persons=1)
+    # face recognised at the doorbell: remember the clothing
+    seen = SimpleNamespace(labels={"person"}, start_mono=now, body_emb=v(1, 0.1), max_persons=1)
     assert Camera._likely_residents(cam, seen, [{"name": "Sam"}]) is None and "Sam" in m._seen
-    # later van achteren bij het hek, zelfde kleding
-    back = SimpleNamespace(labels={"persoon"}, start_mono=now, body_emb=v(1, 0.3), max_persons=1)
+    # later from behind at the gate, same clothes
+    back = SimpleNamespace(labels={"person"}, start_mono=now, body_emb=v(1, 0.3), max_persons=1)
     assert Camera._likely_residents(cam, back, [{"name": None}]) == ["Sam"]
-    other = SimpleNamespace(labels={"persoon"}, start_mono=now, body_emb=v(0, 0, 1), max_persons=1)
+    other = SimpleNamespace(labels={"person"}, start_mono=now, body_emb=v(0, 0, 1), max_persons=1)
     assert Camera._likely_residents(cam, other, []) is None
-    # twee personen in beeld: niet onthouden (welke kleding hoort bij wie?)
+    # two people in view: do not remember (whose clothes are whose?)
     m._seen.clear()
-    two = SimpleNamespace(labels={"persoon"}, start_mono=now, body_emb=v(1), max_persons=2)
+    two = SimpleNamespace(labels={"person"}, start_mono=now, body_emb=v(1), max_persons=2)
     Camera._likely_residents(cam, two, [{"name": "Sam"}])
     assert m._seen == {}
 
@@ -514,25 +514,25 @@ def test_false_alarms_left_out_and_compared(tmp_path):
 
     day = tmp_path / "hek" / "2026-11-02"
     day.mkdir(parents=True)
-    seen = {"status": "ok", "beeldkwaliteit": "goed", "persoon_zichtbaar": True,
-            "voertuig_zichtbaar": False, "dier_zichtbaar": False, "beschrijving": "Iemand bij het hek."}
-    plant = {**seen, "persoon_zichtbaar": False, "beschrijving": "Een plant in een bak."}
+    seen = {"status": "ok", "image_quality": "good", "person_visible": True,
+            "vehicle_visible": False, "animal_visible": False, "description": "Someone at the gate."}
+    plant = {**seen, "person_visible": False, "description": "A plant in a pot."}
     rows = [
-        {"camera": "hek", "label": "persoon", "labels": ["persoon"], "start": "2026-11-02T09:00:00+01:00",
-         "clip": "hek/2026-11-02/a.mp4", "ai": seen, "extern": {"melden": True, "titel": "Bezoeker"}},
-        {"camera": "hek", "label": "persoon", "labels": ["persoon"], "start": "2026-11-02T10:00:00+01:00",
-         "clip": "hek/2026-11-02/b.mp4", "ai": plant, "vals": "ai", "extern": {"melden": False}},
-        {"camera": "hek", "label": "persoon", "labels": ["persoon"], "start": "2026-11-02T11:00:00+01:00",
-         "clip": "hek/2026-11-02/c.mp4", "ai": plant, "vals": "ai", "extern": {"melden": True, "titel": "Iemand"}},
+        {"camera": "hek", "label": "person", "labels": ["person"], "start": "2026-11-02T09:00:00+01:00",
+         "clip": "hek/2026-11-02/a.mp4", "ai": seen, "external": {"notify": True, "title": "Visitor"}},
+        {"camera": "hek", "label": "person", "labels": ["person"], "start": "2026-11-02T10:00:00+01:00",
+         "clip": "hek/2026-11-02/b.mp4", "ai": plant, "false_alarm": "ai", "external": {"notify": False}},
+        {"camera": "hek", "label": "person", "labels": ["person"], "start": "2026-11-02T11:00:00+01:00",
+         "clip": "hek/2026-11-02/c.mp4", "ai": plant, "false_alarm": "ai", "external": {"notify": True, "title": "Iemand"}},
     ]
     for i, r in enumerate(rows):
         (day / f"{i}.json").write_text(json.dumps(r))
     s = summarize_day(tmp_path, date(2026, 11, 2))
-    assert s["events"] == 1 and s["vals"] == 2 and s["persoon_events"] == 1
-    assert s["tekst"] == "1 opnames. 1× een persoon. 2× niets aan de hand weggelaten."
+    assert s["events"] == 1 and s["false_alarms"] == 2 and s["person_events"] == 1
+    assert s["text"] == "1 recordings. 1× a person. 2× nothing to worry about left out."
     c = compare_ai(tmp_path, date(2026, 11, 2))
-    assert (c["events"], c["eens"], c["alleen_extern"], c["alleen_lokaal"]) == (3, 2, 1, 0)
-    assert [r["clip"] for r in c["oneens"]] == ["hek/2026-11-02/c.mp4"]
+    assert (c["events"], c["agree"], c["only_external"], c["only_local"]) == (3, 2, 1, 0)
+    assert [r["clip"] for r in c["disagree"]] == ["hek/2026-11-02/c.mp4"]
 
 
 def test_false_spot_blocks_same_object(tmp_path):
@@ -541,20 +541,20 @@ def test_false_spot_blocks_same_object(tmp_path):
     from camsvc.camera import Camera
     from camsvc.detector import Detection
 
-    cam = SimpleNamespace(object_active={"persoon": False, "voertuig": False, "dier": False},
-                          _false_file=tmp_path / "vals_hek.json", false_spots=[], name="hek",
+    cam = SimpleNamespace(object_active={"person": False, "vehicle": False, "animal": False},
+                          _false_file=tmp_path / "false_alarm_hek.json", false_spots=[], name="hek",
                           _lock=threading.RLock())
     cam._save_false_spots = lambda: Camera._save_false_spots(cam)
     cam._load_false_spots = lambda: Camera._load_false_spots(cam)
-    assert Camera.add_false_spot(cam, "persoon", [0.10, 0.20, 0.20, 0.60], "ev1")
-    assert not Camera.add_false_spot(cam, "aanbellen", [0, 0, 1, 1], "ev2")
+    assert Camera.add_false_spot(cam, "person", [0.10, 0.20, 0.20, 0.60], "ev1")
+    assert not Camera.add_false_spot(cam, "doorbell", [0, 0, 1, 1], "ev2")
     shape = (480, 640)
-    pipe = Detection("persoon", 0.62, (66, 98, 128, 290))            # zelfde regenpijp
-    walker = Detection("persoon", 0.9, (300, 100, 380, 400))          # iemand anders in beeld
-    car = Detection("voertuig", 0.9, (66, 98, 128, 290))              # ander soort object
+    pipe = Detection("person", 0.62, (66, 98, 128, 290))            # same drainpipe
+    walker = Detection("person", 0.9, (300, 100, 380, 400))          # someone else in view
+    car = Detection("vehicle", 0.9, (66, 98, 128, 290))              # another kind of object
     assert Camera._at_false_spot(cam, pipe, shape)
     assert not Camera._at_false_spot(cam, walker, shape) and not Camera._at_false_spot(cam, car, shape)
-    assert Camera._load_false_spots(cam)[0]["event"] == "ev1"          # bewaard over herstarts
+    assert Camera._load_false_spots(cam)[0]["event"] == "ev1"          # kept across restarts
     assert Camera.remove_false_spot(cam, "ev1") == 1 and cam.false_spots == []
 
 
@@ -565,20 +565,20 @@ def test_mark_false_updates_event(tmp_path):
 
     day = tmp_path / "hek" / "2026-11-02"
     day.mkdir(parents=True)
-    (day / "100000_persoon.json").write_text(json.dumps({
-        "id": "ev1", "camera": "hek", "label": "persoon", "labels": ["persoon"], "score": 0.6,
-        "start": "2026-11-02T10:00:00+01:00", "end": "", "duration": 30, "clip": "hek/2026-11-02/100000_persoon.mp4",
+    (day / "100000_person.json").write_text(json.dumps({
+        "id": "ev1", "camera": "hek", "label": "person", "labels": ["person"], "score": 0.6,
+        "start": "2026-11-02T10:00:00+01:00", "end": "", "duration": 30, "clip": "hek/2026-11-02/100000_person.mp4",
         "snapshot": None, "box": [0.1, 0.2, 0.2, 0.6]}))
     learned = []
-    cam = SimpleNamespace(object_active={"persoon": False},
+    cam = SimpleNamespace(object_active={"person": False},
                           add_false_spot=lambda *a: learned.append(a) or True,
                           remove_false_spot=lambda ev: learned.clear())
     svc = SimpleNamespace(store=EventStore(tmp_path, ""), cameras={"hek": cam})
-    assert Service.mark_false(svc, "hek/2026-11-02/100000_persoon.mp4", True) == {
-        "vals": "gebruiker", "plek_onthouden": True}
-    assert learned == [("persoon", [0.1, 0.2, 0.2, 0.6], "ev1")]
-    assert json.loads((day / "100000_persoon.json").read_text())["vals"] == "gebruiker"
-    assert Service.mark_false(svc, "hek/2026-11-02/100000_persoon.mp4", False)["vals"] is None
+    assert Service.mark_false(svc, "hek/2026-11-02/100000_person.mp4", True) == {
+        "false_alarm": "user", "spot_learned": True}
+    assert learned == [("person", [0.1, 0.2, 0.2, 0.6], "ev1")]
+    assert json.loads((day / "100000_person.json").read_text())["false_alarm"] == "user"
+    assert Service.mark_false(svc, "hek/2026-11-02/100000_person.mp4", False)["false_alarm"] is None
     assert learned == []
     with pytest.raises(KeyError):
         Service.mark_false(svc, "../../etc/passwd", True)
@@ -590,15 +590,15 @@ def test_health_marker_and_snapshot(tmp_path):
     h = Health(tmp_path, tmp_path)
     assert not h.previous_crash
     snap = h.snapshot("ready", 2, 3)
-    assert snap["cameras_online"] == 2 and 0 <= snap["schijf"] <= 100 and snap["geheugen_mb"] >= 0  # 0 buiten Linux
-    assert Health(tmp_path, tmp_path).previous_crash          # niet netjes gestopt
+    assert snap["cameras_online"] == 2 and 0 <= snap["disk"] <= 100 and snap["memory_mb"] >= 0  # 0 buiten Linux
+    assert Health(tmp_path, tmp_path).previous_crash          # did not stop cleanly
     Health(tmp_path, tmp_path).clean_stop()
     assert not Health(tmp_path, tmp_path).previous_crash
 
 
 def test_interrupted_clip_is_playable_and_rescued(sample_video, tmp_path):
-    """Gefragmenteerde MP4: de bytes op het moment van een crash zijn tot daar afspeelbaar,
-    en de service maakt er bij het opstarten een gewoon event van."""
+    """Fragmented MP4: the bytes at the moment of a crash are playable up to that point, and the
+    service turns them into a normal event at startup."""
     import shutil
     from types import SimpleNamespace
     from camsvc.events import EventStore
@@ -622,15 +622,15 @@ def test_interrupted_clip_is_playable_and_rescued(sample_video, tmp_path):
             if t >= 20:
                 break
         writer.out.flush() if hasattr(writer.out, "flush") else None
-        shutil.copy(out, crashed)                 # zo staat het bestand er bij een crash
+        shutil.copy(out, crashed)                 # this is what the file looks like after a crash
         writer.close()
     assert clip_duration(crashed) >= 5
     (parts / "abc123.meta.json").write_text(json.dumps(
-        {"id": "abc123", "camera": "hek", "label": "persoon", "start": "2026-11-02T10:00:00+01:00"}))
-    (parts / "kapot.mp4.part").write_bytes(b"geen mp4")
+        {"id": "abc123", "camera": "hek", "label": "person", "start": "2026-11-02T10:00:00+01:00"}))
+    (parts / "broken.mp4.part").write_bytes(b"not an mp4")
     svc = SimpleNamespace(cfg=SimpleNamespace(clips_dir=tmp_path), store=EventStore(tmp_path, ""))
     Service._rescue_parts(svc)
-    saved = json.loads((tmp_path / "hek" / "2026-11-02" / "100000_persoon.json").read_text())
+    saved = json.loads((tmp_path / "hek" / "2026-11-02" / "100000_person.json").read_text())
     assert saved["id"] == "abc123" and saved["duration"] >= 5
     assert list(parts.iterdir()) == []
 
@@ -641,14 +641,14 @@ def test_important_filter_hides_false_alarms_and_own_car(tmp_path):
     day = tmp_path / "carport" / "2026-11-02"
     day.mkdir(parents=True)
     base = {"camera": "carport", "score": 0.9, "end": "", "duration": 30, "snapshot": None}
-    rows = {"100000_voertuig": {"label": "voertuig", "labels": ["voertuig"], "plates": [{"plate": "GKB-31-R"}]},
-            "110000_voertuig": {"label": "voertuig", "labels": ["voertuig"], "plates": [{"plate": "XX-123-B"}]},
-            "120000_persoon": {"label": "persoon", "labels": ["persoon"], "vals": "ai"},
-            "130000_persoon": {"label": "persoon", "labels": ["persoon", "voertuig"], "plates": [{"plate": "GKB-31-R"}]}}
+    rows = {"100000_vehicle": {"label": "vehicle", "labels": ["vehicle"], "plates": [{"plate": "GKB-31-R"}]},
+            "110000_vehicle": {"label": "vehicle", "labels": ["vehicle"], "plates": [{"plate": "XX-123-B"}]},
+            "120000_person": {"label": "person", "labels": ["person"], "false_alarm": "ai"},
+            "130000_person": {"label": "person", "labels": ["person", "vehicle"], "plates": [{"plate": "GKB-31-R"}]}}
     for i, (stem, r) in enumerate(rows.items()):
         (day / f"{stem}.json").write_text(json.dumps({**base, **r, "id": str(i), "start": f"2026-11-02T{stem[:2]}:00:00+01:00",
                                                         "clip": f"carport/2026-11-02/{stem}.mp4"}))
     store = EventStore(tmp_path, "")
-    items, total = store.browse(names={"GKB-31-R": "Onze auto"}, important=True)
+    items, total = store.browse(names={"GKB-31-R": "Our car"}, important=True)
     assert total == 2 and [e["id"] for e in items] == ["3", "1"]
-    assert store.browse(names={"GKB-31-R": "Onze auto"})[1] == 4
+    assert store.browse(names={"GKB-31-R": "Our car"})[1] == 4

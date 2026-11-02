@@ -1,0 +1,97 @@
+blueprint:
+  name: Uitkijk – who is this?
+  description: >-
+    Uitkijk sees an unknown face (the first time, and again when someone keeps coming). The
+    notification has buttons with known names, "New person…" (type a name) and "Ignore". The answer
+    goes back via MQTT; Uitkijk then learns all photos of that person. Works with the iOS and
+    Android apps of Home Assistant (long-press the notification).
+  domain: automation
+  author: Uitkijk
+  source_url: https://github.com/lexi1986/uitkijk/blob/main/homeassistant/blueprints/automation/uitkijk/who_is_this.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    event_entities:
+      name: Event entities of the cameras with face recognition
+      selector:
+        entity:
+          domain: event
+          integration: mqtt
+          multiple: true
+    notify_targets:
+      name: Notification services
+      selector:
+        text:
+          multiple: true
+    topic_prefix:
+      name: MQTT prefix of Uitkijk
+      default: camsvc
+      selector:
+        text: {}
+
+mode: queued
+max: 10
+
+variables:
+  targets: !input notify_targets
+  prefix: !input topic_prefix
+
+triggers:
+  - trigger: state
+    entity_id: !input event_entities
+    not_to: ["unavailable", "unknown"]
+    id: question
+  - trigger: event
+    event_type: mobile_app_notification_action
+    id: answer
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: question
+          - "{{ trigger.to_state.attributes.event_type == 'unknown_face' }}"
+        sequence:
+          - variables:
+              a: "{{ trigger.to_state.attributes }}"
+              cam: "{{ trigger.entity_id | replace('event.cam_', '') | replace('_event', '') }}"
+              cam_name: "{{ state_attr(trigger.entity_id, 'friendly_name') | replace(' Event', '') }}"
+              buttons: >-
+                {% set ns = namespace(k=[]) %}{% for n in (a.names or []) %}{% set ns.k = ns.k + [{'action': 'UITKIJK_FACE|' ~ a.sample ~ '|' ~ n, 'title': n}] %}{% endfor %}
+                {{ ns.k + [{'action': 'UITKIJK_FACE_NEW|' ~ a.sample, 'title': 'New person…', 'behavior': 'textInput', 'textInputButtonTitle': 'Save', 'textInputPlaceholder': 'Name'},
+                           {'action': 'UITKIJK_FACE_IGNORE|' ~ a.sample, 'title': 'Ignore', 'destructive': true}] }}
+          - repeat:
+              for_each: "{{ targets }}"
+              sequence:
+                - action: "{{ repeat.item }}"
+                  data:
+                    title: "🙂 Who is this at {{ cam_name }}?"
+                    message: >-
+                      {{ 'Seen ' ~ a.count ~ '× already' if (a.count | int(1)) > 1 else 'Seen for the first time' }}{{ ', looks like ' ~ a.suggestion if a.suggestion else '' }}. Long-press to pick a name.
+                    data:
+                      image: "/api/camera_proxy/camera.cam_{{ cam }}_snapshot"
+                      tag: "uitkijk-face-{{ a.sample }}"
+                      group: camera-faces
+                      actions: "{{ buttons }}"
+      - conditions:
+          - condition: trigger
+            id: answer
+          - "{{ trigger.event.data.action is string and trigger.event.data.action.startswith('UITKIJK_FACE') }}"
+        sequence:
+          - variables:
+              parts: "{{ trigger.event.data.action.split('|') }}"
+              kind: "{{ parts[0] }}"
+              sample: "{{ parts[1] }}"
+              name: "{{ parts[2] if kind == 'UITKIJK_FACE' else (trigger.event.data.reply_text | default('') | trim) }}"
+          - action: mqtt.publish
+            data:
+              topic: "{{ prefix }}/server/face"
+              payload: "{{ {'sample': sample, 'name': name, 'ignore': kind == 'UITKIJK_FACE_IGNORE'} | to_json }}"
+          - repeat:
+              for_each: "{{ targets }}"
+              sequence:
+                - action: "{{ repeat.item }}"
+                  data:
+                    message: clear_notification
+                    data:
+                      tag: "uitkijk-face-{{ sample }}"

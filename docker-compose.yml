@@ -1,19 +1,19 @@
-# Starten:  docker compose up -d   en open daarna http://<ip-van-deze-computer>:8080
-# De setupcode voor de eerste keer staat in:  docker compose logs camsvc | grep setupcode
+# Start:  docker compose up -d   and then open http://<ip-of-this-computer>:8080
+# The setup code for the first time is in:  docker compose logs camsvc | grep "setup code"
 services:
   camsvc:
     build: .
     image: uitkijk:latest
     container_name: uitkijk
     restart: unless-stopped
-    # host-netwerk: camera's (RTSP), Home Assistant (MQTT) en go2rtc zonder poortgedoe
+    # host network: cameras (RTSP), Home Assistant (MQTT) and go2rtc without port juggling
     network_mode: host
     volumes:
-      - ./data:/data          # config, gezichten, kentekens, modellen
-      - ./clips:/clips        # opnames (kan groot worden: kies hier eventueel een andere schijf)
+      - ./data:/data          # config, faces, plates, models
+      - ./clips:/clips        # recordings (can grow large: point this to another disk if needed)
     environment:
-      - TZ=Europe/Amsterdam
-    # Intel-iGPU voor hardware-decoding (optioneel; weghalen als je die niet hebt)
+      - TZ=Europe/Amsterdam   # your time zone
+    # Intel iGPU for hardware decoding (optional; remove if you do not have one)
     # devices:
     #   - /dev/dri:/dev/dri
 
@@ -23,6 +23,6 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
-      - ./data/go2rtc:/config      # go2rtc.yaml schrijft de installatiewizard
+      - ./data/go2rtc:/config      # the setup wizard writes go2rtc.yaml here
     environment:
       - TZ=Europe/Amsterdam

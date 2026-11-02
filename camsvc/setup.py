@@ -1,10 +1,10 @@
-"""Installatiewizard: zonder (bruikbare) config start de service alleen deze pagina.
+"""Setup wizard: without a (usable) config the service starts only this page.
 
-- Beveiligd met een eenmalige setupcode die in het log staat (`docker compose logs`), zodat niet
-  iedereen op het netwerk de eerste installatie kan doen.
-- Camera's per merk (RTSP-adressen worden ingevuld) met een testknop die echt een beeld ophaalt.
-- Opslaan schrijft config.yaml (en de streams voor go2rtc) en stopt het proces; Docker of systemd
-  start het daarna opnieuw, nu in de gewone stand.
+- Protected by a one-time setup code printed in the log (`docker compose logs`), so not everyone
+  on the network can do the first setup.
+- Cameras per brand (RTSP addresses are filled in) with a test button that really fetches a frame.
+- Saving writes config.yaml (and the streams for go2rtc) and stops the process; Docker or systemd
+  then starts it again, now in normal mode.
 """
 
 from __future__ import annotations
@@ -26,9 +26,9 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 log = logging.getLogger(__name__)
 
 WEB_DIR = Path(__file__).parent / "web"
-TOKEN_FILE = "setupcode"
+TOKEN_FILE = "setup_code"
 
-# RTSP-adressen per merk: (main, sub). {auth} = gebruiker:wachtwoord@ (url-gecodeerd).
+# RTSP addresses per brand: (main, sub). {auth} = user:password@ (URL-encoded).
 BRANDS: dict[str, dict] = {
     "reolink": {"name": "Reolink", "port": 554,
                 "main": "rtsp://{auth}{ip}:{port}/h264Preview_01_main",
@@ -44,8 +44,8 @@ BRANDS: dict[str, dict] = {
               "sub": "rtsp://{auth}{ip}:{port}/cam/realmonitor?channel=1&subtype=1"},
     "tapo": {"name": "TP-Link Tapo / VIGI", "port": 554,
              "main": "rtsp://{auth}{ip}:{port}/stream1", "sub": "rtsp://{auth}{ip}:{port}/stream2"},
-    "unifi": {"name": "UniFi Protect (RTSP-link uit Protect)", "port": 7447, "main": "", "sub": ""},
-    "anders": {"name": "Anders (eigen RTSP-adres)", "port": 554, "main": "", "sub": ""},
+    "unifi": {"name": "UniFi Protect (RTSP link from Protect)", "port": 7447, "main": "", "sub": ""},
+    "other": {"name": "Other (own RTSP address)", "port": 554, "main": "", "sub": ""},
 }
 _SLUG = re.compile(r"[^a-z0-9_]+")
 
@@ -56,32 +56,32 @@ def slug(text: str) -> str:
 
 
 def camera_urls(cam: dict) -> tuple[str, str | None]:
-    """Main- en sub-adres voor een camera uit de wizard (merk + ip, of eigen adressen)."""
-    brand = BRANDS.get(cam.get("brand") or "anders", BRANDS["anders"])
+    """Main and sub address for a camera from the wizard (brand + IP, or own addresses)."""
+    brand = BRANDS.get(cam.get("brand") or "other", BRANDS["other"])
     if cam.get("main_url"):
         return str(cam["main_url"]).strip(), (str(cam.get("sub_url") or "").strip() or None)
     if not brand["main"] or not cam.get("ip"):
-        raise ValueError(f"Camera '{cam.get('name', '?')}': vul het IP-adres of een RTSP-adres in")
+        raise ValueError(f"Camera '{cam.get('name', '?')}': enter the IP address or an RTSP address")
     user, pw = str(cam.get("username") or ""), str(cam.get("password") or "")
     auth = (f"{urllib.parse.quote(user, safe='')}:{urllib.parse.quote(pw, safe='')}@" if user else "")
-    vals = {"auth": auth, "ip": str(cam["ip"]).strip(), "port": int(cam.get("port") or brand["port"])}
-    return brand["main"].format(**vals), brand["sub"].format(**vals)
+    fields = {"auth": auth, "ip": str(cam["ip"]).strip(), "port": int(cam.get("port") or brand["port"])}
+    return brand["main"].format(**fields), brand["sub"].format(**fields)
 
 
 def build_config(data: dict) -> dict:
-    """Config (als dict) uit de antwoorden van de wizard; gooit ValueError bij fouten."""
+    """Config (as a dict) from the wizard answers; raises ValueError on errors."""
     cams = data.get("cameras") or []
     if not cams:
-        raise ValueError("Voeg minstens één camera toe")
+        raise ValueError("Add at least one camera")
     features = data.get("features") or {}
     out_cams, seen = [], set()
     for cam in cams:
         friendly = str(cam.get("friendly_name") or cam.get("name") or "").strip()
         if not friendly:
-            raise ValueError("Elke camera heeft een naam nodig")
+            raise ValueError("Every camera needs a name")
         name = slug(cam.get("name") or friendly)
         if name in seen:
-            raise ValueError(f"De naam '{friendly}' komt twee keer voor")
+            raise ValueError(f"The name '{friendly}' is used twice")
         seen.add(name)
         main, sub = camera_urls(cam)
         entry: dict = {"name": name, "friendly_name": friendly, "main_url": main}
@@ -103,8 +103,8 @@ def build_config(data: dict) -> dict:
         "storage": {"clips_dir": str(data.get("clips_dir") or "/clips"),
                     "state_dir": str(data.get("state_dir") or "/data/state"),
                     "retention_days": float(storage.get("days") or 7),
-                    "retention_days_by_label": {"persoon": float(storage.get("person_days") or 30),
-                                                "aanbellen": float(storage.get("person_days") or 30)},
+                    "retention_days_by_label": {"person": float(storage.get("person_days") or 30),
+                                                "doorbell": float(storage.get("person_days") or 30)},
                     "max_gb": float(storage.get("max_gb") or 50)},
         "api": {"host": "0.0.0.0", "port": int(data.get("port") or 8080),
                 "public_url": str(data.get("public_url") or "http://localhost:8080").rstrip("/")},
@@ -123,7 +123,7 @@ def build_config(data: dict) -> dict:
     domain = str(data.get("domain") or "").strip().lower()
     if domain:
         if not re.fullmatch(r"[a-z0-9.-]+\.[a-z]{2,}", domain):
-            raise ValueError("Domeinnaam klopt niet (bijv. camera.voorbeeld.nl)")
+            raise ValueError("Domain name is not valid (e.g. camera.example.com)")
         cfg["auth"] = {"enabled": True, "rp_id": domain, "origin": f"https://{domain}"}
         cfg["api"]["public_url"] = f"https://{domain}"
     return cfg
@@ -135,7 +135,7 @@ def go2rtc_yaml(cfg: dict) -> str:
 
 
 def probe_rtsp(url: str, timeout: float = 8.0) -> dict:
-    """Eén beeld ophalen: werkt het adres, en welke resolutie? Met een klein JPEG-voorbeeld."""
+    """Fetch one frame: does the address work, and at what resolution? With a small JPEG preview."""
     import av
     import cv2
     try:
@@ -150,20 +150,20 @@ def probe_rtsp(url: str, timeout: float = 8.0) -> dict:
                 import base64
                 return {"ok": True, "width": w, "height": h, "codec": st.codec_context.name,
                         "preview": "data:image/jpeg;base64," + base64.b64encode(jpg.tobytes()).decode()}
-    except Exception as exc:  # noqa: BLE001 - foutmelding voor de gebruiker
+    except Exception as exc:  # noqa: BLE001 - error message for the user
         msg = str(exc)
         if "401" in msg or "Unauthorized" in msg:
-            msg = "Gebruikersnaam of wachtwoord klopt niet"
+            msg = "User name or password is wrong"
         elif "timed out" in msg.lower() or "timeout" in msg.lower():
-            msg = "Geen antwoord: klopt het IP-adres en de poort?"
+            msg = "No answer: are the IP address and port correct?"
         return {"ok": False, "error": msg[:200]}
-    return {"ok": False, "error": "Geen beeld ontvangen"}
+    return {"ok": False, "error": "No image received"}
 
 
 def test_mqtt(host: str, port: int, username: str | None, password: str | None) -> dict:
     import paho.mqtt.client as mqtt
     done = threading.Event()
-    result: dict = {"ok": False, "error": "Geen antwoord van de MQTT-server"}
+    result: dict = {"ok": False, "error": "No answer from the MQTT server"}
 
     def on_connect(_c, _u, _f, rc, _p):
         result.update({"ok": not rc.is_failure, "error": None if not rc.is_failure else str(rc)})
@@ -186,7 +186,7 @@ def test_mqtt(host: str, port: int, username: str | None, password: str | None) 
 
 
 def push_go2rtc(url: str, cfg: dict) -> None:
-    """Streams meteen aan een draaiende go2rtc doorgeven (anders na de volgende herstart)."""
+    """Pass the streams to a running go2rtc right away (otherwise after the next restart)."""
     for cam in cfg["cameras"]:
         q = urllib.parse.urlencode({"name": cam["name"], "src": cam["main_url"]})
         try:
@@ -208,13 +208,13 @@ def setup_token(state_dir: Path) -> str:
 
 def create_setup_app(config_path: Path, state_dir: Path, reason: str):
     token = setup_token(state_dir)
-    log.warning("Installatiewizard actief (%s). Open de webpagina en gebruik setupcode: %s", reason, token)
-    app = FastAPI(title="camera-service installatie")
+    log.warning("Setup wizard active (%s). Open the web page and use setup code: %s", reason, token)
+    app = FastAPI(title="Uitkijk setup")
 
     def check(request: Request) -> None:
         given = request.headers.get("x-setup-code", "")
         if not hmac.compare_digest(given.strip().upper().encode(), token.encode()):
-            raise HTTPException(401, "Setupcode klopt niet (zie het log van de container)")
+            raise HTTPException(401, "Setup code is not correct (see the container log)")
 
     @app.get("/", response_class=HTMLResponse)
     def page():
@@ -259,14 +259,14 @@ def create_setup_app(config_path: Path, state_dir: Path, reason: str):
     def mqtt_check(request: Request, m: dict = Body(...)):
         check(request)
         if not m.get("host"):
-            raise HTTPException(400, "Vul de MQTT-server in")
+            raise HTTPException(400, "Enter the MQTT server")
         return test_mqtt(str(m["host"]), int(m.get("port") or 1883), m.get("username") or None,
                          m.get("password") or None)
 
     @app.post("/api/setup/save")
     def save(request: Request, data: dict = Body(...)):
         check(request)
-        # paden en poort volgen de omgeving waarin de wizard draait (Docker: /data en /clips)
+        # paths and port follow the environment the wizard runs in (Docker: /data and /clips)
         data["port"] = int(os.environ.get("CAMSVC_PORT", "8080"))
         data["state_dir"] = str(state_dir)
         data["clips_dir"] = os.environ.get("CAMSVC_CLIPS", "/clips")
@@ -277,20 +277,20 @@ def create_setup_app(config_path: Path, state_dir: Path, reason: str):
             raise HTTPException(400, str(exc)) from exc
         config_path.parent.mkdir(parents=True, exist_ok=True)
         if config_path.exists():
-            config_path.rename(config_path.with_suffix(".yaml.vorige"))
-        header = ("# Gemaakt door de installatiewizard. Aanpassen mag; na wijzigen de service herstarten.\n"
-                  "# Alle opties staan in config.example.yaml.\n")
+            config_path.rename(config_path.with_suffix(".yaml.previous"))
+        header = ("# Created by the setup wizard. Feel free to edit; restart the service afterwards.\n"
+                  "# All options are listed in config.example.yaml.\n")
         config_path.write_text(header + yaml.safe_dump(cfg, sort_keys=False, allow_unicode=True))
         config_path.chmod(0o600)
         if cfg.get("live"):
             g = config_path.parent / "go2rtc" / "go2rtc.yaml"
             g.parent.mkdir(parents=True, exist_ok=True)
             g.write_text(go2rtc_yaml(cfg))
-            g.chmod(0o600)            # bevat de camerawachtwoorden
+            g.chmod(0o600)            # contains the camera passwords
             push_go2rtc(cfg["live"]["go2rtc_url"], cfg)
         (state_dir / TOKEN_FILE).unlink(missing_ok=True)
-        log.warning("Config opgeslagen in %s; herstarten in de gewone stand", config_path)
-        # even later stoppen zodat het antwoord nog aankomt; Docker/systemd start opnieuw
+        log.warning("Config saved to %s; restarting in normal mode", config_path)
+        # stop a moment later so the response still arrives; Docker/systemd restarts us
         threading.Timer(1.5, lambda: os._exit(3)).start()
         return JSONResponse({"ok": True, "public_url": cfg["api"]["public_url"],
                              "auth": bool(cfg.get("auth"))})

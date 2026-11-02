@@ -1,16 +1,16 @@
 <!doctype html>
-<html lang="nl">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#090e18">
   <link rel="apple-touch-icon" href="/icon-180.png">
-  <title>Camera's – installatie</title>
+  <title>Uitkijk – setup</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    /* Midnight Electric v1.0 — zelfde tokens als index.html */
+    /* Midnight Electric v1.0 — same tokens as index.html */
     :root {
       color-scheme: dark;
       --me-bg: #090e18; --me-surface: #131c2b; --me-elevated: #1d2a3d; --me-border: #2b3a50; --me-border-strong: #39516c;
@@ -58,62 +58,62 @@
 <body>
   <main class="wrap">
     <div>
-      <div class="eyebrow">Installatie</div>
-      <h1>Camera's instellen</h1>
+      <div class="eyebrow">Uitkijk setup</div>
+      <h1>Set up your cameras</h1>
     </div>
 
     <section class="card" id="codeCard">
-      <div><h2>Setupcode</h2><p>Staat in het log van de service, bijv. met <code>docker compose logs camsvc</code>. Zo kan niet iedereen op je netwerk de installatie doen.</p></div>
-      <label>Setupcode <input id="code" autocomplete="one-time-code" placeholder="XXXX-XXXX" style="text-transform:uppercase;letter-spacing:.12em"></label>
+      <div><h2>Setup code</h2><p>Printed in the service log, e.g. with <code>docker compose logs camsvc</code>. This way not everyone on your network can do the setup.</p></div>
+      <label>Setup code <input id="code" autocomplete="one-time-code" placeholder="XXXX-XXXX" style="text-transform:uppercase;letter-spacing:.12em"></label>
       <div class="result" id="codeRes"></div>
-      <div class="btns"><button class="primary" id="codeGo">Verder</button></div>
+      <div class="btns"><button class="primary" id="codeGo">Continue</button></div>
     </section>
 
     <div id="wizard" hidden>
       <section class="card">
-        <div><h2>1. Camera's</h2><p>Kies het merk en vul het IP-adres en de inloggegevens van de camera in. Met <b>Test</b> haalt de service meteen een beeld op.</p></div>
+        <div><h2>1. Cameras</h2><p>Choose the brand and enter the IP address and login of the camera. <b>Test</b> makes the service fetch an image right away.</p></div>
         <div id="cams" style="display:grid;gap:.75rem"></div>
-        <div class="btns"><button id="addCam">+ Camera toevoegen</button></div>
+        <div class="btns"><button id="addCam">+ Add camera</button></div>
       </section>
 
       <section class="card" style="margin-top:1.25rem">
-        <div><h2>2. Home Assistant (optioneel)</h2><p>Via MQTT krijgt Home Assistant sensoren, snapshots en meldingen. Gebruik je de Mosquitto-app in HA, vul dan het adres van HA in en een HA-gebruiker. Leeg laten kan ook.</p></div>
+        <div><h2>2. Home Assistant (optional)</h2><p>Via MQTT, Home Assistant gets sensors, snapshots and notifications. If you use the Mosquitto app in HA, enter the address of HA and an HA user. Leaving this empty is fine too.</p></div>
         <div class="grid">
-          <label>MQTT-server <input id="mqttHost" placeholder="bijv. 192.168.1.5"></label>
-          <label>Poort <input id="mqttPort" type="number" value="1883"></label>
-          <label>Gebruiker <input id="mqttUser" autocomplete="off"></label>
-          <label>Wachtwoord <input id="mqttPass" type="password" autocomplete="new-password"></label>
+          <label>MQTT server <input id="mqttHost" placeholder="e.g. 192.168.1.5"></label>
+          <label>Port <input id="mqttPort" type="number" value="1883"></label>
+          <label>User <input id="mqttUser" autocomplete="off"></label>
+          <label>Password <input id="mqttPass" type="password" autocomplete="new-password"></label>
         </div>
         <div class="result" id="mqttRes"></div>
-        <div class="btns"><button id="mqttTest">Verbinding testen</button></div>
+        <div class="btns"><button id="mqttTest">Test connection</button></div>
       </section>
 
       <section class="card" style="margin-top:1.25rem">
-        <div><h2>3. Opties</h2></div>
-        <label class="check"><input type="checkbox" id="fFaces"><span>Gezichtsherkenning<small>Mensen leren herkennen via de webpagina. Downloadt bij de eerste start ± 500 MB aan modellen. Het herkenningsmodel (InsightFace) mag alleen niet-commercieel gebruikt worden. Let op de privacyregels als je camera de straat filmt.</small></span></label>
-        <label class="check"><input type="checkbox" id="fPlates"><span>Nederlandse kentekens lezen<small>Alleen bij camera's waar je dat aanvinkt; bekende auto's geef je een naam.</small></span></label>
-        <label class="check"><input type="checkbox" id="fLive" checked><span>Live beeld via go2rtc<small>Zit in de Docker-installatie. Op de iPhone werkt live beeld via WebRTC.</small></span></label>
-        <label id="goRow">Adres van go2rtc <input id="goUrl" value="http://localhost:1984"></label>
+        <div><h2>3. Options</h2></div>
+        <label class="check"><input type="checkbox" id="fFaces"><span>Face recognition<small>Teach it to recognise people via the web page. Downloads ~500 MB of models on first start. The recognition model (InsightFace) is for non-commercial use only. Mind the privacy rules if your camera films the street.</small></span></label>
+        <label class="check"><input type="checkbox" id="fPlates"><span>Read Dutch licence plates<small>Only for cameras where you tick it; you can name known cars.</small></span></label>
+        <label class="check"><input type="checkbox" id="fLive" checked><span>Live view via go2rtc<small>Included in the Docker setup. On the iPhone live view works via WebRTC.</small></span></label>
+        <label id="goRow">go2rtc address <input id="goUrl" value="http://localhost:1984"></label>
       </section>
 
       <section class="card" style="margin-top:1.25rem">
-        <div><h2>4. Opslag</h2><p>Oude opnames worden automatisch opgeruimd.</p></div>
+        <div><h2>4. Storage</h2><p>Old recordings are cleaned up automatically.</p></div>
         <div class="grid">
-          <label>Opnames bewaren (dagen) <input id="days" type="number" value="7" min="1"></label>
-          <label>Met een persoon (dagen) <input id="pdays" type="number" value="30" min="1"></label>
-          <label>Maximaal (GB) <input id="maxgb" type="number" value="50" min="1"></label>
+          <label>Keep recordings (days) <input id="days" type="number" value="7" min="1"></label>
+          <label>With a person (days) <input id="pdays" type="number" value="30" min="1"></label>
+          <label>Maximum (GB) <input id="maxgb" type="number" value="50" min="1"></label>
         </div>
       </section>
 
       <section class="card" style="margin-top:1.25rem">
-        <div><h2>5. Adres</h2><p>Hoe je de webpagina opent. Met een eigen domeinnaam en HTTPS (bijv. via Caddy of Nginx Proxy Manager) kun je inloggen met een passkey; zonder domein is de pagina open voor iedereen op je netwerk.</p></div>
-        <label>Adres van deze service <input id="pubUrl"></label>
-        <label>Domeinnaam voor HTTPS en passkeys (optioneel) <input id="domain" placeholder="bijv. camera.voorbeeld.nl" autocapitalize="off"></label>
+        <div><h2>5. Address</h2><p>How you open the web page. With your own domain name and HTTPS (e.g. via Caddy or Nginx Proxy Manager) you log in with a passkey; without a domain the page is open to everyone on your network.</p></div>
+        <label>Address of this service <input id="pubUrl"></label>
+        <label>Domain name for HTTPS and passkeys (optional) <input id="domain" placeholder="e.g. camera.example.com" autocapitalize="off"></label>
       </section>
 
       <section class="card" style="margin-top:1.25rem">
         <div class="result" id="saveRes"></div>
-        <div class="btns"><button class="primary" id="save">Opslaan en starten</button></div>
+        <div class="btns"><button class="primary" id="save">Save and start</button></div>
       </section>
     </div>
   </main>
@@ -126,7 +126,7 @@
     async function call(path, body) {
       const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Setup-Code": code }, body: JSON.stringify(body || {}) });
       const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.detail || "Er ging iets mis");
+      if (!r.ok) throw new Error(data.detail || "Something went wrong");
       return data;
     }
     function show(el, ok, text) { el.className = `result ${ok ? "ok" : "err"}`; el.textContent = text; }
@@ -137,24 +137,24 @@
       const el = document.createElement("div");
       el.className = "cam"; el.dataset.i = i;
       el.innerHTML = `
-        <div class="head"><b>Camera ${i + 1}</b><button class="link" data-remove>Verwijderen</button></div>
+        <div class="head"><b>Camera ${i + 1}</b><button class="link" data-remove>Remove</button></div>
         <div class="grid">
-          <label>Naam <input data-f="friendly_name" placeholder="bijv. Voordeur"></label>
-          <label>Merk <select data-f="brand">${opts}</select></label>
+          <label>Name <input data-f="friendly_name" placeholder="e.g. Front door"></label>
+          <label>Brand <select data-f="brand">${opts}</select></label>
         </div>
         <div class="grid" data-std>
-          <label>IP-adres <input data-f="ip" placeholder="192.168.1.30" inputmode="decimal"></label>
-          <label>Poort <input data-f="port" type="number"></label>
-          <label>Gebruiker <input data-f="username" autocomplete="off"></label>
-          <label>Wachtwoord <input data-f="password" type="password" autocomplete="new-password"></label>
+          <label>IP address <input data-f="ip" placeholder="192.168.1.30" inputmode="decimal"></label>
+          <label>Port <input data-f="port" type="number"></label>
+          <label>User <input data-f="username" autocomplete="off"></label>
+          <label>Password <input data-f="password" type="password" autocomplete="new-password"></label>
         </div>
         <div class="grid" data-custom hidden>
-          <label>RTSP-adres hoge kwaliteit <input data-f="main_url" placeholder="rtsp://gebruiker:wachtwoord@ip:554/..."></label>
-          <label>RTSP-adres lage kwaliteit (optioneel) <input data-f="sub_url" placeholder="voor detectie, bijv. 640×360"></label>
+          <label>RTSP address, high quality <input data-f="main_url" placeholder="rtsp://user:password@ip:554/..."></label>
+          <label>RTSP address, low quality (optional) <input data-f="sub_url" placeholder="for detection, e.g. 640×360"></label>
         </div>
-        <label class="check" data-plates hidden><input type="checkbox" data-f="plates"><span>Kentekens lezen bij deze camera</span></label>
+        <label class="check" data-plates hidden><input type="checkbox" data-f="plates"><span>Read licence plates on this camera</span></label>
         <div class="result" data-res></div>
-        <img class="preview" data-prev alt="Testbeeld">
+        <img class="preview" data-prev alt="Test image">
         <div class="btns"><button data-test>Test</button></div>`;
       const sel = el.querySelector('[data-f="brand"]');
       const sync = () => {
@@ -198,12 +198,12 @@
       const btn = ev.target.closest("[data-test]");
       if (!btn) return;
       const res = el.querySelector("[data-res]"), prev = el.querySelector("[data-prev]");
-      btn.disabled = true; btn.textContent = "Bezig…"; prev.style.display = "none";
+      btn.disabled = true; btn.textContent = "Testing…"; prev.style.display = "none";
       try {
         const r = await call("/api/setup/test-camera", camData(el));
         if (r.ok) {
-          const sub = r.sub ? (r.sub.ok ? ` · lage kwaliteit ${r.sub.width}×${r.sub.height}` : " · lage kwaliteit werkt niet, dan wordt de hoge gebruikt") : "";
-          show(res, true, `Werkt: ${r.width}×${r.height} (${r.codec})${sub}`);
+          const sub = r.sub ? (r.sub.ok ? ` · low quality ${r.sub.width}×${r.sub.height}` : " · low quality does not work; the high one will be used") : "";
+          show(res, true, `Works: ${r.width}×${r.height} (${r.codec})${sub}`);
           prev.src = r.preview; prev.style.display = "block";
         } else show(res, false, r.error);
       } catch (e) { show(res, false, e.message); }
@@ -213,7 +213,7 @@
     $("mqttTest").onclick = async () => {
       try {
         const r = await call("/api/setup/test-mqtt", { host: $("mqttHost").value.trim(), port: Number($("mqttPort").value), username: $("mqttUser").value, password: $("mqttPass").value });
-        show($("mqttRes"), r.ok, r.ok ? "Verbonden met de MQTT-server" : `Mislukt: ${r.error}`);
+        show($("mqttRes"), r.ok, r.ok ? "Connected to the MQTT server" : `Failed: ${r.error}`);
       } catch (e) { show($("mqttRes"), false, e.message); }
     };
 
@@ -231,8 +231,8 @@
       try {
         const r = await call("/api/setup/save", body);
         show($("saveRes"), true, r.auth
-          ? `Opgeslagen. De service start opnieuw. Open daarna ${r.public_url} en koppel je passkey met de code uit het log.`
-          : "Opgeslagen. De service start opnieuw; deze pagina gaat zo vanzelf verder…");
+          ? `Saved. The service restarts. Then open ${r.public_url} and pair your passkey with the code from the log.`
+          : "Saved. The service restarts; this page continues by itself in a moment…");
         if (!r.auth) {
           const wait = async () => {
             try { const s = await fetch("/api/status", { cache: "no-store" }); if (s.ok) { location.href = "/"; return; } } catch {}

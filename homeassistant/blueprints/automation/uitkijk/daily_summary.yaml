@@ -1,0 +1,56 @@
+blueprint:
+  name: Uitkijk – daily summary
+  description: >-
+    Every evening (22:00 by default) Uitkijk sends a summary of the day: who came by, doorbell rings,
+    packages and vehicles. This automation turns it into a notification on your phone.
+  domain: automation
+  author: Uitkijk
+  source_url: https://github.com/lexi1986/uitkijk/blob/main/homeassistant/blueprints/automation/uitkijk/daily_summary.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    summary_sensor:
+      name: Daily summary sensor
+      description: sensor.camera_daily_summary from Uitkijk
+      selector:
+        entity:
+          domain: sensor
+          integration: mqtt
+    notify_targets:
+      name: Notification services
+      selector:
+        text:
+          multiple: true
+    app_url:
+      name: Address of the Uitkijk web page
+      selector:
+        text:
+          type: url
+
+mode: single
+
+variables:
+  targets: !input notify_targets
+  app: !input app_url
+  s: !input summary_sensor
+
+triggers:
+  - trigger: state
+    entity_id: !input summary_sensor
+    attribute: date
+
+conditions:
+  # do not notify again when HA restarts and the stored summary of earlier comes in again
+  - "{{ state_attr(s, 'date') == now().date().isoformat() and (now() - trigger.to_state.last_updated).total_seconds() < 60 }}"
+
+actions:
+  - repeat:
+      for_each: "{{ targets }}"
+      sequence:
+        - action: "{{ repeat.item }}"
+          data:
+            title: "📋 Cameras today"
+            message: "{{ state_attr(s, 'text') }}"
+            data:
+              tag: camera-daily-summary
+              url: "{{ app }}/"

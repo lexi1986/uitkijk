@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="nl">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -8,13 +8,13 @@
   <link rel="apple-touch-icon" href="/icon-180.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Camera's">
-  <title>Camera's – inloggen</title>
+  <meta name="apple-mobile-web-app-title" content="Uitkijk">
+  <title>Uitkijk – log in</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    /* Midnight Electric v1.0 — zelfde tokens als index.html */
+    /* Midnight Electric v1.0 — same tokens as index.html */
     :root {
       color-scheme: dark;
       --me-bg: #090e18;
@@ -60,36 +60,36 @@
     <div class="logo" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L20 3m-3 3l2 2m-4 0l2 2"/></svg>
     </div>
-    <h1 id="title">Camera's</h1>
-    <p id="intro">Log in met je passkey (Face ID of Touch ID).</p>
+    <h1 id="title">Uitkijk</h1>
+    <p id="intro">Log in with your passkey (Face ID or Touch ID).</p>
 
     <div id="setup" hidden>
-      <label>Koppelcode
+      <label>Pairing code
         <input id="code" autocomplete="one-time-code" placeholder="XXXX-XXXX-XXXX" maxlength="14">
       </label>
     </div>
-    <label id="nameRow" hidden>Naam van dit apparaat
-      <input id="name" placeholder="bijv. MacBook van Sam" maxlength="40">
+    <label id="nameRow" hidden>Name of this device
+      <input id="name" placeholder="e.g. Sam's MacBook" maxlength="40">
     </label>
 
     <div class="err" id="err" role="alert"></div>
-    <button id="go">Inloggen met passkey</button>
+    <button id="go">Log in with passkey</button>
   </main>
 
   <script>
     const $ = (id) => document.getElementById(id);
-    // WebAuthn werkt met ArrayBuffers; de server praat base64url
+    // WebAuthn works with ArrayBuffers; the server speaks base64url
     const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
     const unb64 = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
     let setup = false;
-    // terug naar waar je heen wilde (bijv. een opname uit een melding); alleen eigen paden
+    // back to where you were going (e.g. a recording from a notification); own paths only
     const nextUrl = () => { const n = new URLSearchParams(location.search).get("next") || "/"; return n.startsWith("/") && !n.startsWith("//") ? n : "/"; };
 
     function fail(msg) { $("err").textContent = msg; $("err").classList.add("show"); $("go").disabled = false; }
     async function post(path, body) {
       const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
       const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.detail || "Er ging iets mis");
+      if (!r.ok) throw new Error(data.detail || "Something went wrong");
       return data;
     }
     const credJSON = (c) => ({
@@ -111,7 +111,7 @@
       o.user.id = unb64(o.user.id);
       o.excludeCredentials = (o.excludeCredentials || []).map((c) => ({ ...c, id: unb64(c.id) }));
       const cred = await navigator.credentials.create({ publicKey: o });
-      await post("/api/auth/register", { challenge_id, credential: credJSON(cred), name: $("name").value.trim() || "Apparaat", code });
+      await post("/api/auth/register", { challenge_id, credential: credJSON(cred), name: $("name").value.trim() || "Device", code });
     }
     async function login() {
       const { challenge_id, options: o } = await post("/api/auth/login/options");
@@ -128,20 +128,20 @@
         await (setup ? register() : login());
         location.replace(nextUrl());
       } catch (e) {
-        fail(e.name === "NotAllowedError" ? "Geannuleerd of niet toegestaan. Probeer het opnieuw." : e.message);
+        fail(e.name === "NotAllowedError" ? "Cancelled or not allowed. Please try again." : e.message);
       }
     });
 
     (async () => {
-      if (!window.PublicKeyCredential) { fail("Deze browser of verbinding ondersteunt geen passkeys. Open de pagina via https://."); $("go").disabled = true; return; }
+      if (!window.PublicKeyCredential) { fail("This browser or connection does not support passkeys. Open the page via https://."); $("go").disabled = true; return; }
       const s = await fetch("/api/auth/state", { cache: "no-store" }).then((r) => r.json()).catch(() => ({}));
       if (s.logged_in) { location.replace(nextUrl()); return; }
       setup = !!s.setup;
       if (setup) {
-        $("title").textContent = "Passkey koppelen";
-        $("intro").textContent = "Nog geen passkey. Vul de eenmalige koppelcode in en maak een passkey op dit apparaat; met iCloud-sleutelhanger staat hij daarna ook op je andere Apple-apparaten.";
+        $("title").textContent = "Pair a passkey";
+        $("intro").textContent = "No passkey yet. Enter the one-time pairing code and create a passkey on this device; with iCloud Keychain it is then available on your other Apple devices too.";
         $("setup").hidden = false; $("nameRow").hidden = false;
-        $("go").textContent = "Passkey aanmaken";
+        $("go").textContent = "Create passkey";
       }
     })();
   </script>

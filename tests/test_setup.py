@@ -1,4 +1,4 @@
-"""Installatiewizard: van antwoorden naar een config die de service echt kan laden."""
+"""Setup wizard: from answers to a config the service can really load."""
 
 import pytest
 import yaml
@@ -46,7 +46,7 @@ def test_build_config_rejects_bad_input():
         build_config({"cameras": [{"friendly_name": "A", "brand": "tapo", "ip": "1.2.3.4"},
                                   {"friendly_name": "a", "brand": "tapo", "ip": "1.2.3.5"}]})
     with pytest.raises(ValueError):
-        build_config({"cameras": [{"friendly_name": "A", "brand": "tapo", "ip": "1.2.3.4"}], "domain": "geen domein"})
+        build_config({"cameras": [{"friendly_name": "A", "brand": "tapo", "ip": "1.2.3.4"}], "domain": "not a domain"})
     auth = build_config({"cameras": [{"friendly_name": "A", "brand": "tapo", "ip": "1.2.3.4"}], "domain": "cam.voorbeeld.nl"})
     assert auth["auth"]["origin"] == "https://cam.voorbeeld.nl" and auth["api"]["public_url"] == "https://cam.voorbeeld.nl"
     assert build_config({"cameras": [{"friendly_name": "A", "brand": "tapo", "ip": "1.2.3.4"}]})["mqtt"]["host"] == ""
@@ -56,7 +56,7 @@ def test_build_config_rejects_bad_input():
 def test_setup_api_needs_code(tmp_path, monkeypatch):
     app = create_setup_app(tmp_path / "config.yaml", tmp_path / "state", "test")
     client = TestClient(app)
-    code = (tmp_path / "state" / "setupcode").read_text().strip()
+    code = (tmp_path / "state" / "setup_code").read_text().strip()
     assert client.get("/").status_code == 200
     assert client.post("/api/setup/check").status_code == 401
     assert client.post("/api/setup/check", headers={"X-Setup-Code": code.lower()}).status_code == 200
@@ -67,5 +67,5 @@ def test_setup_api_needs_code(tmp_path, monkeypatch):
                           "state_dir": str(tmp_path / "state")})
     assert r.status_code == 200 and exits == [1]
     assert load_config(tmp_path / "config.yaml").cameras[0].name == "hek"
-    assert not (tmp_path / "state" / "setupcode").exists()
+    assert not (tmp_path / "state" / "setup_code").exists()
     assert (tmp_path / "config.yaml").stat().st_mode & 0o077 == 0

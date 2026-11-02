@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Installeert camera-service binnen een Debian-LXC: pakketten, de code in /opt/camera-service,
-# een Python-venv en de systemd-service.
+# Installs Uitkijk inside a Debian LXC: packages, the code in /opt/camera-service, a Python venv
+# and the systemd service.
 #
-# Twee manieren om de code te krijgen:
-#   - Lokaal (standaard): kopieert de map waar dit script in staat (of SRC=/pad) naar /opt.
-#     Bijwerken: vanaf de Proxmox-host `CTID=<id> bash deploy/lxc/push-update.sh`.
-#   - Eigen GitHub-repo: REPO=gebruiker/camera-service [GITHUB_TOKEN=...] bash install.sh
-#     Dan komt er ook een timer die elke 5 minuten nieuwe commits ophaalt.
-# Google Coral (USB): CORAL=1 installeert de driver (libedgetpu) en de TFLite-runtime.
-# Standaard (CORAL=auto) gebeurt dat zodra er een Coral aan de container hangt.
-# Opnieuw draaien is veilig (herstelt of werkt bij).
+# Two ways to get the code:
+#   - Local (default): copies the folder this script is in (or SRC=/path) to /opt.
+#     Updating: from the Proxmox host `CTID=<id> bash deploy/lxc/push-update.sh`.
+#   - A GitHub repo: REPO=lexi1986/uitkijk [GITHUB_TOKEN=...] bash install.sh
+#     Then a timer also fetches new commits every 5 minutes.
+# Google Coral (USB): CORAL=1 installs the driver (libedgetpu) and the TFLite runtime.
+# By default (CORAL=auto) that happens as soon as a Coral is attached to the container.
+# Running it again is safe (repairs or updates).
 set -euo pipefail
 
 REPO="${REPO:-}"
@@ -24,24 +24,24 @@ CONF=/etc/camera-service
 STATE=/var/lib/camera-service
 CLIPS=/clips
 
-[ "$(id -u)" = 0 ] || { echo "Draai dit als root." >&2; exit 1; }
+[ "$(id -u)" = 0 ] || { echo "Run this as root." >&2; exit 1; }
 export DEBIAN_FRONTEND=noninteractive
-# Debian-template heeft alleen C.UTF-8; voorkomt locale-waarschuwingen
+# the Debian template only has C.UTF-8; avoids locale warnings
 export LANG=C.UTF-8 LC_ALL=C.UTF-8
 
-echo "==> Pakketten"
+echo "==> Packages"
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends git ca-certificates python3 python3-venv \
   ffmpeg libglib2.0-0 ocl-icd-libopencl1 clinfo >/dev/null
-# Intel-drivers (iGPU voor het objectmodel); mogen ontbreken, dan draait alles op de CPU.
+# Intel drivers (iGPU for the object model); may be missing, then everything runs on the CPU.
 apt-get install -y -qq --no-install-recommends intel-opencl-icd intel-media-va-driver vainfo >/dev/null \
-  || echo "Let op: Intel-drivers niet geïnstalleerd; objectmodel draait op de CPU."
+  || echo "Note: Intel drivers not installed; the object model runs on the CPU."
 
-echo "==> Code ophalen"
+echo "==> Fetching code"
 if [ -n "$REPO" ]; then
   if [ -n "$TOKEN" ]; then URL="https://x-access-token:${TOKEN}@github.com/${REPO}.git"; else URL="https://github.com/${REPO}.git"; fi
   if [ -d "$DIR/.git" ]; then
-    # zonder token de bestaande remote (met token) laten staan
+    # without a token, keep the existing remote (with token)
     [ -n "$TOKEN" ] && git -C "$DIR" remote set-url origin "$URL"
     git -C "$DIR" fetch -q origin "$BRANCH"
     git -C "$DIR" reset -q --hard "origin/$BRANCH"
@@ -49,13 +49,13 @@ if [ -n "$REPO" ]; then
     rm -rf "$DIR"
     git clone -q --branch "$BRANCH" --single-branch "$URL" "$DIR"
   fi
-  # Het token staat in .git/config: alleen root mag dat lezen.
+  # The token is in .git/config: only root may read it.
   chmod 700 "$DIR/.git"
 else
-  [ -f "$SRC/camsvc/__init__.py" ] || { echo "Geen code gevonden in $SRC (zet SRC=/pad of REPO=...)." >&2; exit 1; }
+  [ -f "$SRC/camsvc/__init__.py" ] || { echo "No code found in $SRC (set SRC=/path or REPO=...)." >&2; exit 1; }
   if [ "$(cd "$SRC" && pwd)" != "$DIR" ]; then
     mkdir -p "$DIR"
-    # alles behalve venv, modellen en git vervangen
+    # replace everything except venv, models and git
     find "$DIR" -mindepth 1 -maxdepth 1 ! -name .venv ! -name models -exec rm -rf {} +
     tar -C "$SRC" --exclude=.venv --exclude=.git --exclude=models --exclude=__pycache__ \
       --exclude=.pytest_cache -cf - . | tar -C "$DIR" -xf -
@@ -63,28 +63,28 @@ else
 fi
 
 if [ "$CORAL" = auto ]; then
-  # Coral USB: 1a6e:089a vóór en 18d1:9302 na het laden van de firmware
+  # Coral USB: 1a6e:089a before and 18d1:9302 after loading the firmware
   CORAL=0
   [ -f "$DIR/models/yolo11n_edgetpu.tflite" ] && CORAL=1
   grep -qsE '^(1a6e|18d1)$' /sys/bus/usb/devices/*/idVendor && CORAL=1
 fi
 
-echo "==> Gebruiker en mappen"
+echo "==> User and folders"
 id camsvc >/dev/null 2>&1 || useradd --system --home-dir "$DIR" --shell /usr/sbin/nologin camsvc
 for g in render video; do getent group "$g" >/dev/null && usermod -aG "$g" camsvc; done
 mkdir -p "$CONF" "$STATE" "$CLIPS" "$DIR/models"
-# /clips is een eigen schijf met lost+found erin: alleen de map zelf, niet recursief
+# /clips is a separate disk with lost+found in it: only the folder itself, not recursively
 chown camsvc:camsvc "$CLIPS"
 chown -R camsvc:camsvc "$STATE" "$DIR/models"
 
-echo "==> Python-omgeving"
+echo "==> Python environment"
 [ -d "$DIR/.venv" ] || python3 -m venv "$DIR/.venv"
 "$DIR/.venv/bin/pip" install -q --upgrade pip
 "$DIR/.venv/bin/pip" install -q -r "$DIR/requirements.txt"
 
-# Gezichtsherkenning (klein, ± 40 MB); mislukt het, dan draait de rest gewoon door.
+# Face recognition models; if this fails, everything else runs normally.
 DEST="$DIR/models" bash "$DIR/deploy/fetch-face-models.sh" \
-  || echo "Let op: gezichtsmodellen niet opgehaald; gezichtsherkenning staat uit."
+  || echo "Note: face models not downloaded; face recognition is off."
 
 if [ "$CORAL" = 1 ]; then
   echo "==> Google Coral (Edge TPU)"
@@ -92,16 +92,18 @@ if [ "$CORAL" = 1 ]; then
   if coral_repo && apt-get install -y -qq --no-install-recommends libedgetpu1-std >/dev/null; then
     "$DIR/.venv/bin/pip" install -q ai-edge-litert
   else
-    echo "Let op: Coral-driver niet geïnstalleerd; objectmodel draait op de CPU."
+    echo "Note: Coral driver not installed; the object model runs on the CPU."
   fi
 fi
 
-if [ ! -f "$CONF/config.yaml" ]; then
-  cp "$DIR/config.example.yaml" "$CONF/config.yaml"
-  NEW_CONFIG=1
+# Without a config the service starts the setup wizard, which writes the config itself
+[ -f "$CONF/config.yaml" ] || NEW_CONFIG=1
+chown root:camsvc "$CONF"
+chmod 770 "$CONF"
+if [ -f "$CONF/config.yaml" ]; then
+  chown root:camsvc "$CONF/config.yaml"
+  chmod 660 "$CONF/config.yaml"
 fi
-chown root:camsvc "$CONF/config.yaml"
-chmod 640 "$CONF/config.yaml"
 
 echo "==> systemd"
 cp "$DIR/deploy/camera-service.service" /etc/systemd/system/camera-service.service
@@ -109,7 +111,7 @@ cp "$DIR/deploy/camera-service.service" /etc/systemd/system/camera-service.servi
 if [ -n "$REPO" ]; then
 cat > /usr/local/bin/camera-service-update <<UPD
 #!/usr/bin/env bash
-# Haalt de laatste code op; alleen bij een nieuwe versie: dependencies bijwerken en herstarten.
+# Fetches the latest code; only on a new version: update dependencies and restart.
 set -euo pipefail
 cd "$DIR"
 git fetch -q origin "$BRANCH"
@@ -122,14 +124,14 @@ if [ "\$(git rev-parse HEAD)" != "\$(git rev-parse origin/$BRANCH)" ]; then
   cp deploy/camera-service.service /etc/systemd/system/camera-service.service
   systemctl daemon-reload
   systemctl restart camera-service
-  echo "Bijgewerkt naar \$(git rev-parse --short HEAD)"
+  echo "Updated to \$(git rev-parse --short HEAD)"
 fi
 UPD
 chmod 755 /usr/local/bin/camera-service-update
 
 cat > /etc/systemd/system/camera-service-update.service <<SVC
 [Unit]
-Description=camera-service bijwerken vanaf GitHub
+Description=Update Uitkijk from GitHub
 After=network-online.target
 Wants=network-online.target
 
@@ -139,7 +141,7 @@ ExecStart=/usr/local/bin/camera-service-update
 SVC
 cat > /etc/systemd/system/camera-service-update.timer <<TMR
 [Unit]
-Description=Controleer elke ${INTERVAL} op een nieuwe versie van camera-service
+Description=Check for a new version of Uitkijk every ${INTERVAL}
 
 [Timer]
 OnBootSec=2min
@@ -150,7 +152,7 @@ Persistent=true
 WantedBy=timers.target
 TMR
 else
-  # lokale installatie: geen automatische updates (meer)
+  # local installation: no automatic updates (any more)
   systemctl disable --now camera-service-update.timer >/dev/null 2>&1 || true
   rm -f /etc/systemd/system/camera-service-update.{service,timer} /usr/local/bin/camera-service-update
 fi
@@ -159,29 +161,30 @@ systemctl enable camera-service >/dev/null
 [ -n "$REPO" ] && systemctl enable --now camera-service-update.timer >/dev/null
 
 if [ ! -f "$DIR/models/yolo11n.onnx" ] && [ "$EXPORT_MODEL" = 1 ]; then
-  echo "==> Objectmodel maken (eenmalig, duurt een paar minuten)"
+  echo "==> Building the object model (once, takes a few minutes)"
   bash "$DIR/deploy/export-model.sh"
 fi
 if [ "$CORAL" = 1 ] && [ ! -f "$DIR/models/yolo11n_edgetpu.tflite" ] && [ "$EXPORT_MODEL" = 1 ]; then
-  echo "==> Model voor de Coral maken (eenmalig, duurt langer: TensorFlow wordt tijdelijk geïnstalleerd)"
-  FORMAT=edgetpu bash "$DIR/deploy/export-model.sh" || echo "Let op: Coral-model maken mislukt; de CPU wordt gebruikt."
+  echo "==> Building the model for the Coral (once, takes longer: TensorFlow is installed temporarily)"
+  FORMAT=edgetpu bash "$DIR/deploy/export-model.sh" || echo "Note: building the Coral model failed; the CPU is used."
 fi
 if [ "$CORAL" = 1 ] && [ -f "$DIR/models/yolo11n_edgetpu.tflite" ] && ! grep -qE '^\s*coral_path:' "$CONF/config.yaml"; then
-  # coral_path onder model: zetten (alleen als het er nog niet staat)
+  # set coral_path under model: (only when it is not there yet)
   sed -i "s|^model:|model:\n  coral_path: $DIR/models/yolo11n_edgetpu.tflite|" "$CONF/config.yaml"
-  echo "Coral-model ingesteld in $CONF/config.yaml (model.coral_path)"
+  echo "Coral model set in $CONF/config.yaml (model.coral_path)"
 fi
 
 echo
-[ -e /dev/dri/renderD128 ] && echo "iGPU: /dev/dri/renderD128 aanwezig" || echo "iGPU: niet doorgegeven (alles op de CPU)"
-[ -f "$DIR/models/yolo11n.onnx" ] || echo "Objectmodel ontbreekt: bash $DIR/deploy/export-model.sh (tot dan alleen bewegingsdetectie)"
+[ -e /dev/dri/renderD128 ] && echo "iGPU: /dev/dri/renderD128 present" || echo "iGPU: not passed through (everything on the CPU)"
+[ -f "$DIR/models/yolo11n.onnx" ] || echo "Object model missing: bash $DIR/deploy/export-model.sh (motion detection only until then)"
 if [ "${NEW_CONFIG:-0}" = 1 ]; then
-  echo "Vul eerst de config in: nano $CONF/config.yaml  — en start dan: systemctl start camera-service"
+  systemctl restart camera-service
+  echo "Setup wizard started. Setup code: journalctl -u camera-service | grep 'setup code'"
 else
   systemctl restart camera-service
-  echo "camera-service herstart. Logs: journalctl -u camera-service -f"
+  echo "Service restarted. Logs: journalctl -u camera-service -f"
 fi
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
-echo "Status: http://${IP:-<ip-van-de-container>}:8080/api/status"
-[ -n "$REPO" ] && echo "Automatische updates elke ${INTERVAL} vanaf ${REPO} (log: journalctl -u camera-service-update)"
+echo "Web page: http://${IP:-<ip-of-the-container>}:8080/"
+[ -n "$REPO" ] && echo "Automatic updates every ${INTERVAL} from ${REPO} (log: journalctl -u camera-service-update)"
 true
