@@ -1,0 +1,19 @@
+[Unit]
+Description=go2rtc (live view for Uitkijk)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=camsvc
+Group=camsvc
+ExecStart=/usr/local/bin/go2rtc -config /etc/camera-service/go2rtc/go2rtc.yaml
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/etc/camera-service/go2rtc
+
+[Install]
+WantedBy=multi-user.target

@@ -7,6 +7,7 @@
 #     Updating: from the Proxmox host `CTID=<id> bash deploy/lxc/push-update.sh`.
 #   - A GitHub repo: REPO=lexi1986/uitkijk [GITHUB_TOKEN=...] bash install.sh
 #     Then a timer also fetches new commits every 5 minutes.
+# Live view: go2rtc is installed as its own service (GO2RTC=0 skips it).
 # Google Coral (USB): CORAL=1 installs the driver (libedgetpu) and the TFLite runtime.
 # By default (CORAL=auto) that happens as soon as a Coral is attached to the container.
 # Running it again is safe (repairs or updates).
@@ -20,6 +21,8 @@ INTERVAL="${INTERVAL:-5min}"
 TOKEN="${GITHUB_TOKEN:-}"
 EXPORT_MODEL="${EXPORT_MODEL:-0}"
 CORAL="${CORAL:-auto}"
+GO2RTC="${GO2RTC:-1}"
+GO2RTC_VERSION=1.9.9   # same as in docker-compose.yml
 CONF=/etc/camera-service
 STATE=/var/lib/camera-service
 CLIPS=/clips
@@ -31,7 +34,7 @@ export LANG=C.UTF-8 LC_ALL=C.UTF-8
 
 echo "==> Packages"
 apt-get update -qq
-apt-get install -y -qq --no-install-recommends git ca-certificates python3 python3-venv \
+apt-get install -y -qq --no-install-recommends git ca-certificates curl python3 python3-venv \
   ffmpeg libglib2.0-0 ocl-icd-libopencl1 clinfo >/dev/null
 # Intel drivers (iGPU for the object model); may be missing, then everything runs on the CPU.
 apt-get install -y -qq --no-install-recommends intel-opencl-icd intel-media-va-driver vainfo >/dev/null \
@@ -108,6 +111,22 @@ fi
 echo "==> systemd"
 cp "$DIR/deploy/camera-service.service" /etc/systemd/system/camera-service.service
 
+if [ "$GO2RTC" = 1 ]; then
+  echo "==> go2rtc $GO2RTC_VERSION (live view)"
+  if [ "$(cat /usr/local/bin/go2rtc.version 2>/dev/null)" != "$GO2RTC_VERSION" ]; then
+    curl -fsSL -o /usr/local/bin/go2rtc.tmp \
+      "https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/go2rtc_linux_$(dpkg --print-architecture)" \
+      && chmod 755 /usr/local/bin/go2rtc.tmp && mv /usr/local/bin/go2rtc.tmp /usr/local/bin/go2rtc \
+      && echo "$GO2RTC_VERSION" > /usr/local/bin/go2rtc.version \
+      || echo "Note: go2rtc not downloaded; live view is unavailable."
+  fi
+  # the setup wizard writes the streams (with camera passwords) here
+  mkdir -p "$CONF/go2rtc"
+  chown camsvc:camsvc "$CONF/go2rtc"
+  chmod 700 "$CONF/go2rtc"
+  cp "$DIR/deploy/go2rtc.service" /etc/systemd/system/go2rtc.service
+fi
+
 if [ -n "$REPO" ]; then
 cat > /usr/local/bin/camera-service-update <<UPD
 #!/usr/bin/env bash
@@ -158,6 +177,7 @@ else
 fi
 systemctl daemon-reload
 systemctl enable camera-service >/dev/null
+[ "$GO2RTC" = 1 ] && [ -x /usr/local/bin/go2rtc ] && systemctl enable --now go2rtc >/dev/null && systemctl restart go2rtc
 [ -n "$REPO" ] && systemctl enable --now camera-service-update.timer >/dev/null
 
 if [ ! -f "$DIR/models/yolo11n.onnx" ] && [ "$EXPORT_MODEL" = 1 ]; then

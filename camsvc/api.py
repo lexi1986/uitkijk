@@ -27,6 +27,12 @@ WEB_DIR = Path(__file__).parent / "web"
 LIVE_FILES = {"stream.html": "text/html", "video-stream.js": "text/javascript",
               "video-rtc.js": "text/javascript"}
 LABELS = ("doorbell", "person", "vehicle", "animal", "motion")
+LIVE_DOWN = """<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<body style="margin:0;display:grid;place-items:center;height:100vh;background:#090E18;color:#F3F7FC;font:15px/1.5 Inter,system-ui,sans-serif;text-align:center">
+<div style="max-width:28rem;padding:1.5rem"><h2 style="margin:0 0 .5rem;font-size:1.1rem">Live view is not available</h2>
+<p style="color:#94A4BA;margin:0">go2rtc does not answer at {url}. With Docker: <code>docker compose up -d go2rtc</code>.
+On Proxmox: run <code>deploy/lxc/install.sh</code> again to install it, then <code>systemctl status go2rtc</code>.
+Recording and notifications keep working.</p></div></body>"""
 
 if TYPE_CHECKING:
     from .service import Service
@@ -400,7 +406,10 @@ def create_app(svc: "Service") -> FastAPI:
             with urllib.request.urlopen(f"{svc.cfg.go2rtc_url}/{name}", timeout=5) as r:
                 body = r.read()
         except (urllib.error.URLError, OSError) as exc:
-            raise HTTPException(502, f"go2rtc not reachable: {exc}") from exc
+            if name != "stream.html":
+                raise HTTPException(502, f"go2rtc not reachable: {exc}") from exc
+            # the live window shows this page itself: explain instead of showing raw JSON
+            return Response(LIVE_DOWN.format(url=svc.cfg.go2rtc_url), status_code=502, media_type="text/html")
         return Response(body, media_type=LIVE_FILES[name])
 
     @app.websocket("/live/api/ws")

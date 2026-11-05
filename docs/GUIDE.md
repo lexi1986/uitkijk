@@ -106,12 +106,18 @@ The script creates:
 - **iGPU passthrough**: `/dev/dri/renderD128` with the right `render` group (Proxmox 8.2+).
 - Installs the service (`deploy/lxc/install.sh`) and builds the **YOLO11n model** (~1 GB temporary
   download, cleaned up afterwards).
+- **go2rtc** for the live view, as its own service (`systemctl status go2rtc`). It reads the streams
+  the setup wizard writes to `/etc/camera-service/go2rtc/go2rtc.yaml`. Skip it with `GO2RTC=0`.
 
 Other values via variables: `CTID`, `CT_NAME`, `STORAGE`, `CLIPS_STORAGE`, `CLIPS_GB`, `VLAN`,
 `CORES`, `MEMORY`, `GPU=0` (no iGPU), `EXPORT_MODEL=0` (build the model later).
 
 **Updating** after a code change: rsync again and then on the host
 `CTID=<number> bash /root/camera-service/deploy/lxc/push-update.sh`. Config, clips and model stay.
+
+**Installed before go2rtc was included** (the live window says "Live view is not available")? Run
+the installer once more inside the container; it adds go2rtc and keeps your config, clips and model:
+`bash /opt/camera-service/deploy/lxc/install.sh`.
 
 ### 2. Installing manually (existing container)
 
