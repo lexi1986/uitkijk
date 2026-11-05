@@ -30,8 +30,14 @@ log = logging.getLogger(__name__)
 DETECTOR_FILE = "face_detection_yunet_2023mar.onnx"
 RECOGNIZER_FILE = "face_recognition_sface_2021dec.onnx"
 ARCFACE_FILE = "w600k_r50.onnx"
+DETECT_SCORE = 0.6        # YuNet: 0.8 misses most faces filmed from above or at a distance
 MIN_FACE_PX = 36          # smaller faces are too unreliable
-DETECT_MAX_SIDE = 640     # downscale YuNet input to at most this many pixels
+MIN_QUALITY = 0.2         # below this no usable face (back of a head, blurry, from the side)
+# ArcFace gives a real, sharp face a long feature vector; wood, fabric and blobs that YuNet
+# took for a face stayed below ~15, real faces were mostly above 16
+MIN_NORM = 13.5           # below this: not a face
+MIN_NORM_LEARN = 17.0     # only self-learn above this: one wrongly learned image reinforces itself
+DETECT_MAX_SIDE = 1920    # YuNet input at most this large; smaller makes distant faces unfindable
 NAME_RE = re.compile(r"^[\w][\w \-]{0,39}$")
 ID_RE = re.compile(r"[0-9a-f]{12}")
 
@@ -43,6 +49,7 @@ UNKNOWN_QUALITY = 0.3     # do not keep worse unknown faces
 UNKNOWN_MAX = 400
 UNKNOWN_KEEP_DAYS = 30
 ASSIGN_MAX = 8            # this many of the best photos are kept when naming
+NAME_SHARE = 0.5          # this share of a face's frames must carry the name ...
 
 
 @dataclass(frozen=True)
@@ -57,7 +64,7 @@ class Backend:
 # SFace: 0.363 = same person according to the paper; slightly stricter against mix-ups.
 SFACE = Backend("sface", 0.42, 0.05, 0.60, 0.45)
 # ArcFace: other people score around 0.0-0.1 here, the same person in camera images 0.2-0.8.
-ARCFACE = Backend("arcface", 0.26, 0.08, 0.45, 0.30)
+ARCFACE = Backend("arcface", 0.26, 0.08, 0.38, 0.30)   # learn from 0.38: faces filmed from above rarely score higher
 
 
 @dataclass
@@ -68,6 +75,7 @@ class FaceMatch:
     quality: float = 0.0      # 0-1: size, sharpness and how frontal
     margin: float = 0.0       # lead over the best other person
     embedding: np.ndarray | None = field(default=None, repr=False)
+    norm: float = 0.0         # length of the ArcFace vector before normalising (0 = unknown)
 
 
 @dataclass
@@ -126,21 +134,88 @@ def summarize(matches: list[FaceMatch], group_threshold: float, limit: int = 4) 
             ranked = sorted(votes.items(), key=lambda kv: -kv[1])
             if len(ranked) == 1 or ranked[0][1] >= 2 * ranked[1][1]:
                 name = ranked[0][0]
+            # ... or the sharpest frame itself: a stranger sometimes resembles someone in a few
+            # frames (3 of 9), a known person in most of them
+            share = sum(1 for m in g if m.name == name) / len(g)
+            if name and share < NAME_SHARE and g[0].name != name:
+                name = None
         score = max((m.score for m in g if m.name == name), default=max(m.score for m in g))
         out.append(FaceGroup(name, round(score, 3), g[0], g))
     out.sort(key=lambda fg: (fg.name is None, -fg.best.quality))
     return out[:limit]
 
 
+class YuNetGPU:
+    """YuNet via OpenVINO on the iGPU, with the same output as cv2.FaceDetectorYN.detect:
+    per face x, y, width, height, 5 points (eyes, nose, mouth corners) as x, y, and the score."""
+    CANVASES = ((640, 640), (1920, 1088))   # fixed sizes: the GPU compiles once per input shape
+
+    def __init__(self, path: Path):
+        import openvino as ov
+        core = ov.Core()
+        self._models = []
+        for w, h in self.CANVASES:
+            m = core.read_model(str(path))
+            m.reshape([1, 3, h, w])
+            self._models.append(((w, h), core.compile_model(m, "GPU", {"PERFORMANCE_HINT": "LATENCY"})))
+
+    def detect(self, bgr: np.ndarray) -> np.ndarray | None:
+        h, w = bgr.shape[:2]
+        (cw, ch), model = next(((c, m) for c, m in self._models if w <= c[0] and h <= c[1]),
+                               self._models[-1])
+        f = min(1.0, cw / w, ch / h)
+        img = cv2.resize(bgr, (int(w * f), int(h * f))) if f < 1 else bgr
+        canvas = np.zeros((ch, cw, 3), np.float32)
+        canvas[:img.shape[0], :img.shape[1]] = img
+        out = model(canvas.transpose(2, 0, 1)[None])
+        rows = []
+        # decoding as in OpenCV's FaceDetectorYN (face_detect.cpp)
+        for st in (8, 16, 32):
+            cls, obj = (np.clip(out[model.output(f"{k}_{st}")][0, :, 0], 0, 1) for k in ("cls", "obj"))
+            score = np.sqrt(cls * obj)
+            keep = np.flatnonzero(score >= DETECT_SCORE)
+            if not len(keep):
+                continue
+            r, c = np.divmod(keep, cw // st)
+            b = out[model.output(f"bbox_{st}")][0, keep]
+            k = out[model.output(f"kps_{st}")][0, keep].copy()
+            bw, bh = np.exp(b[:, 2]) * st, np.exp(b[:, 3]) * st
+            k[:, 0::2] = (k[:, 0::2] + c[:, None]) * st
+            k[:, 1::2] = (k[:, 1::2] + r[:, None]) * st
+            rows.append(np.column_stack([(c + b[:, 0]) * st - bw / 2, (r + b[:, 1]) * st - bh / 2,
+                                         bw, bh, k, score[keep]]))
+        if not rows:
+            return None
+        d = np.concatenate(rows).astype(np.float32)
+        idx = np.array(cv2.dnn.NMSBoxes(d[:, :4].tolist(), d[:, 14].tolist(), DETECT_SCORE, 0.3,
+                                        top_k=5000)).reshape(-1)
+        d = d[idx]
+        d[:, :14] /= f
+        return d
+
+
+def _gpu_ok(path: Path, size: int) -> bool:
+    try:
+        from .detector import openvino_works
+        return openvino_works(path, "GPU", size)
+    except ImportError:
+        return False
+
+
 class FaceRecognizer:
-    def __init__(self, models_dir: Path, faces_dir: Path, unknown_dir: Path | None = None):
+    def __init__(self, models_dir: Path, faces_dir: Path, unknown_dir: Path | None = None,
+                 gpu: bool = False):
         self.faces_dir = faces_dir
         self.faces_dir.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self._detector = cv2.FaceDetectorYN.create(
-            str(models_dir / DETECTOR_FILE), "", (320, 320), score_threshold=0.8)
+            str(models_dir / DETECTOR_FILE), "", (320, 320), score_threshold=DETECT_SCORE)
+        self._gpu_detector = None
+        if gpu and _gpu_ok(models_dir / DETECTOR_FILE, 640):
+            self._gpu_detector = YuNetGPU(models_dir / DETECTOR_FILE)
         self._sface = cv2.FaceRecognizerSF.create(str(models_dir / RECOGNIZER_FILE), "")
         self._arcface = None
+        arc_device = "CPU"
         if (models_dir / ARCFACE_FILE).exists():
             import onnxruntime as ort
             ort.disable_telemetry_events()
@@ -150,7 +225,18 @@ class FaceRecognizer:
             opts.enable_cpu_mem_arena = False   # leaner: no retained working memory
             self._arcface = ort.InferenceSession(str(models_dir / ARCFACE_FILE), opts,
                                                  providers=["CPUExecutionProvider"])
-            self._arc_input = self._arcface.get_inputs()[0].name
+            name = self._arcface.get_inputs()[0].name
+            self._arc_run = lambda x: self._arcface.run(None, {name: x})[0][0]
+            if gpu and _gpu_ok(models_dir / ARCFACE_FILE, 112):
+                import openvino as ov
+                core = ov.Core()
+                m = core.read_model(str(models_dir / ARCFACE_FILE))
+                m.reshape([1, 3, 112, 112])
+                arc = core.compile_model(m, "GPU", {"PERFORMANCE_HINT": "LATENCY"})
+                self._arc_run = lambda x: arc(x)[0][0]
+                arc_device = "GPU"
+        log.info("Faces: detection on %s, recognition on %s",
+                 "GPU" if self._gpu_detector else "CPU", arc_device)
         self.backend = ARCFACE if self._arcface is not None else SFACE
         self._cache_file = self.faces_dir / f".emb-{self.backend.name}.json"
         self._names: list[str] = []
@@ -165,16 +251,19 @@ class FaceRecognizer:
     # ------------------------------------------------------------------ features
     def embed(self, aligned: np.ndarray) -> np.ndarray:
         """Normalised feature vector of an aligned 112x112 crop (BGR)."""
+        v = self._raw_embed(aligned)
+        return v / max(float(np.linalg.norm(v)), 1e-6)
+
+    def _raw_embed(self, aligned: np.ndarray) -> np.ndarray:
         if aligned.shape[:2] != (112, 112):
             aligned = cv2.resize(aligned, (112, 112))
         with self._lock:
             if self._arcface is not None:
                 x = (cv2.cvtColor(aligned, cv2.COLOR_BGR2RGB).astype(np.float32) - 127.5) / 127.5
-                v = self._arcface.run(None, {self._arc_input: x.transpose(2, 0, 1)[None]})[0][0]
+                v = self._arc_run(x.transpose(2, 0, 1)[None])
             else:
                 v = self._sface.feature(aligned)[0]
-        v = np.asarray(v, np.float32)
-        return v / max(float(np.linalg.norm(v)), 1e-6)
+        return np.asarray(v, np.float32)
 
     def _per_person(self, emb: np.ndarray) -> dict[str, float]:
         with self._lock:
@@ -289,7 +378,8 @@ class FaceRecognizer:
         name = group.name
         cands = [m for m in group.members if m.name == name and m.embedding is not None
                  and m.quality >= AUTO_QUALITY and m.margin >= AUTO_MARGIN
-                 and m.score >= self.backend.learn]
+                 and m.score >= self.backend.learn
+                 and (self.backend is not ARCFACE or m.norm >= MIN_NORM_LEARN)]
         if not name or not cands:
             return False
         m = max(cands, key=lambda c: c.score * c.quality)
@@ -333,8 +423,11 @@ class FaceRecognizer:
         scale = min(1.0, DETECT_MAX_SIDE / max(h, w))
         small = cv2.resize(bgr, (int(w * scale), int(h * scale))) if scale < 1 else bgr
         with self._lock:
-            self._detector.setInputSize((small.shape[1], small.shape[0]))
-            _, faces = self._detector.detect(small)
+            if self._gpu_detector is not None:
+                faces = self._gpu_detector.detect(small)
+            else:
+                self._detector.setInputSize((small.shape[1], small.shape[0]))
+                _, faces = self._detector.detect(small)
         if faces is None:
             return []
         out = []
@@ -345,13 +438,20 @@ class FaceRecognizer:
                 continue
             with self._lock:
                 aligned = self._sface.alignCrop(bgr, face)
-            emb = self.embed(aligned)
+            quality = face_quality(face, aligned)
+            if quality < MIN_QUALITY:
+                continue
+            raw = self._raw_embed(aligned)
+            norm = float(np.linalg.norm(raw))
+            if self.backend is ARCFACE and norm < MIN_NORM:
+                continue
+            emb = raw / max(norm, 1e-6)
             name, score, margin = self.identify(emb)
             ok, buf = cv2.imencode(".jpg", aligned, [cv2.IMWRITE_JPEG_QUALITY, 92])
             if not ok:
                 continue
-            out.append(FaceMatch(name, score, buf.tobytes(), face_quality(face, aligned),
-                                 margin, emb))
+            out.append(FaceMatch(name, score, buf.tobytes(), quality, margin, emb,
+                                 norm if self.backend is ARCFACE else 0.0))
         return out
 
 

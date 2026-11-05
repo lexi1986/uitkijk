@@ -13,6 +13,13 @@ storage:
     person: 30
     doorbell: 30
   max_gb: 25                        # above this the oldest clips go first
+  # Move clips to a NAS after a while (see the guide, "Archive on a NAS"). Recording stays local;
+  # when the NAS is offline, clips stay local until it is back.
+  # archive:
+  #   dir: /archive                   # must be a mount point (NFS/SMB), otherwise it is not used
+  #   local_hours: 48                 # keep this long on the local disk
+  #   retention_days: 60              # how long the NAS keeps them
+  #   max_gb: 2000
 
 api:
   host: 0.0.0.0                     # behind a reverse proxy (HTTPS, passkeys): 127.0.0.1
@@ -35,7 +42,7 @@ model:
   # install.sh sets this line itself once the Coral model exists.
   # coral_path: /opt/camera-service/models/yolo11n_edgetpu.tflite
   device: AUTO                      # only for OpenVINO (.xml): AUTO = iGPU, otherwise CPU
-  input_size: 320
+  input_size: 320                   # with OpenVINO on an iGPU, 640 sees people further away (export at 640)
 
 # Live view on the web page via go2rtc (included in the Docker setup). Per camera the stream name in
 # go2rtc is the camera name by default; otherwise `live: <name>` on the camera.

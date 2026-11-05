@@ -9,7 +9,7 @@ import threading
 import time
 import uuid
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
@@ -21,7 +21,7 @@ import numpy as np
 from .config import CameraConfig
 from .detector import Detection, ObjectDetector, draw_detections
 from .events import EventRecord, EventStore, clip_paths
-from .faces import FaceMatch, FaceRecognizer, summarize
+from .faces import FaceGroup, FaceMatch, FaceRecognizer, summarize
 from .motion import MotionDetector, build_mask, motion_region, point_masked, zones_at
 from .plates import PlateRead, PlateReader, vote
 from .recorder import RTSP_OPTIONS, MainRecorder
@@ -60,6 +60,11 @@ PLATE_PARKED_AFTER = 900.0    # unknown vehicle that stays this long: alert
 NIGHT_HOURS = (22, 7)         # unknown vehicle between these hours: alert immediately
 RING_FACE_ATTEMPTS = 3        # on a doorbell ring, search the whole frame for a face this often (1 s apart)
 ASK_FACE_AT = (1, 3)          # ask who it is the first time and again when an unknown face returns
+RESCAN_STEP = 0.5             # saved clip: look for faces every half second ...
+RESCAN_MAX_SECONDS = 120      # ... in at most the first two minutes
+RESCAN_MIN_FRAMES = 2         # a newly found face must appear in this many frames
+RESCAN_BODY_STEP = 1.0        # clothing: look for the largest person every second
+_RESCAN_SLOT = threading.Semaphore(1)   # one clip at a time, across all cameras
 BODY_ATTEMPTS = 3             # this many sharp crops of the person per event
 BODY_INTERVAL = 2.0
 ARRIVAL_WINDOW = 300.0        # this long after arriving home (per HA) an unknown person is probably that resident
@@ -706,6 +711,10 @@ class Camera:
                 if cx2 - cx1 < 40 or cy2 - cy1 < 40:
                     continue
                 matches += self.faces.analyse(frame[cy1:cy2, cx1:cx2])
+            if not matches and boxes:
+                # nothing in the crop (head at the edge of the box, filmed from above):
+                # search the whole sharp frame instead
+                matches = self.faces.analyse(frame)
             if not matches:
                 return
             with self._lock:
@@ -1114,7 +1123,7 @@ class Camera:
                            "name": self.plates.name_of(plate) if self.plates else None,
                            "confidence": best.confidence})
         recognizer = self.faces
-        groups = summarize(ev.faces, recognizer.backend.group if recognizer else 1.1)
+        groups = self._check_clothing(summarize(ev.faces, recognizer.backend.group if recognizer else 1.1), ev)
         faces = []
         for i, g in enumerate(groups, 1):
             crop = day_dir / f"{base}.face{i}.jpg"
@@ -1145,7 +1154,106 @@ class Camera:
             self.mqtt.publish_event(self.name, record)
         if recognizer is not None and groups:
             self._learn_faces(recognizer, groups, faces, ev.start_wall)
+        if (recognizer is not None and ev.label in ("person", "doorbell")
+                and not any(g.name and g.score >= recognizer.backend.learn for g in groups)):
+            threading.Thread(target=self._rescan_faces, args=(ev, mp4, day_dir, base, bool(groups)),
+                             name=f"rescan-{self.name}", daemon=True).start()
         self._check_unknown_plates(ev, plates)
+
+    def _rescan_faces(self, ev: ActiveEvent, mp4: Path, day_dir: Path, base: str,
+                      had_faces: bool) -> None:
+        """After saving, search the whole clip once more: live there are only a few attempts,
+        and a face that briefly looks at the camera often falls in between."""
+        recognizer = self.faces
+        try:
+            with _RESCAN_SLOT:
+                found: list[FaceMatch] = []
+                last = last_body = -RESCAN_BODY_STEP
+                body_area = start_area = ev.body_area
+                with av.open(str(mp4)) as container:
+                    # without thread_type="AUTO": with it, breaking off after RESCAN_MAX_SECONDS hangs
+                    for frame in container.decode(container.streams.video[0]):
+                        t = float(frame.time or 0)
+                        if t > RESCAN_MAX_SECONDS:
+                            break
+                        if t - last < RESCAN_STEP:
+                            continue
+                        last = t
+                        bgr = frame.to_ndarray(format="bgr24")
+                        found += recognizer.analyse(bgr)
+                        if t - last_body >= RESCAN_BODY_STEP:
+                            last_body = t
+                            body_area = self._rescan_body(ev, bgr, body_area)
+            body_better = body_area > start_area
+            if not found and not body_better:
+                return
+            ev.body_area = body_area
+            before = summarize(ev.faces, recognizer.backend.group)
+            live = {id(m) for m in ev.faces}
+            # a real face appears in several frames; a backpack or fabric pattern that looks like
+            # a face in only one: such a single new hit only counts when it is certain
+            groups = [g for g in summarize(ev.faces + found, recognizer.backend.group, limit=16)
+                      if len(g.members) >= RESCAN_MIN_FRAMES or any(id(m) in live for m in g.members)
+                      or (g.name and g.score >= recognizer.backend.learn)][:4]
+            groups = self._check_clothing(groups, ev)
+            old = {(g.name, g.best.quality) for g in self._check_clothing(before, ev)}
+            if {(g.name, g.best.quality) for g in groups} == old and not body_better:
+                return
+            faces = []
+            for i, g in enumerate(groups, 1):
+                crop = day_dir / f"{base}.face{i}.jpg"
+                crop.write_bytes(g.best.crop_jpg)
+                faces.append({"crop": str(crop.relative_to(self.clips_dir)), "name": g.name,
+                              "score": g.score, "quality": g.best.quality})
+            js = self.store.json_path(str(mp4.relative_to(self.clips_dir)))
+            if js:
+                self.store.update(js, {"faces": faces, "likely": self._likely_residents(ev, faces)})
+            log.info("[%s] clip searched again: %s", self.name,
+                     ", ".join(g.name or "unknown" for g in groups))
+            # learn names; only collect unknowns if there was no face at first (else they exist)
+            pairs = [(g, f) for g, f in zip(groups, faces) if g.name or not had_faces]
+            if pairs:
+                self._learn_faces(recognizer, [g for g, _ in pairs], [f for _, f in pairs],
+                                  ev.start_wall)
+        except Exception:  # noqa: BLE001 - must never get in the way of saving
+            log.exception("[%s] searching the clip again failed", self.name)
+
+    def _rescan_body(self, ev: ActiveEvent, bgr: np.ndarray, best_area: int) -> int:
+        """Clothing from the saved clip: the largest person in this frame, if larger than what
+        we had (closer = more reliable). Returns the largest area."""
+        if self.bodies is None or self.detector is None:
+            return best_area
+        people = self.detector.detect(bgr, ["person"], float(self.cfg.objects["min_score"]))
+        if not people:
+            return best_area
+        x1, y1, x2, y2 = max((d.box for d in people), key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
+        area = (x2 - x1) * (y2 - y1)
+        if area <= best_area:
+            return best_area
+        emb = self.bodies.embed(bgr[max(0, y1):y2, max(0, x1):x2])
+        if emb is None:
+            return best_area
+        ev.body_emb = emb
+        return area
+
+    def _check_clothing(self, groups: list[FaceGroup], ev: ActiveEvent) -> list[FaceGroup]:
+        """Hold a doubtful name (face below the learning threshold) against today's clothing:
+        if the clothing clearly matches someone else, no name. Only with one person in view,
+        otherwise the clothing may belong to someone else."""
+        if (self.bodies is None or self.faces is None or ev.body_emb is None
+                or ev.max_persons > 1 or not any(g.name for g in groups)):
+            return groups
+        hit = self.bodies.match(ev.body_emb)
+        if hit is None:
+            return groups
+        out = []
+        for g in groups:
+            if g.name and g.name != hit[0] and g.score < self.faces.backend.learn:
+                log.info("[%s] face %s (%.2f) does not match the clothing of %s (%.2f): no name",
+                         self.name, g.name, g.score, *hit)
+                g = replace(g, name=None)
+            out.append(g)
+        return out
 
     def _recent_arrivals(self, now: float) -> list[str]:
         """Residents who just arrived home according to HA (within ARRIVAL_WINDOW)."""
@@ -1159,7 +1267,11 @@ class Camera:
         if "person" not in ev.labels:
             return None
         if names:
-            if self.bodies is not None and ev.body_emb is not None and ev.max_persons == 1 and len(set(names)) == 1:
+            # only with a certain face: a doubtful name would teach the wrong clothing
+            sure = {f["name"] for f in faces if f["name"] and self.faces is not None
+                    and f["score"] >= self.faces.backend.learn}
+            if (self.bodies is not None and ev.body_emb is not None and ev.max_persons == 1
+                    and len(set(names)) == 1 and sure):
                 self.bodies.remember(names[0], ev.body_emb)
             return None
         likely = set(self._recent_arrivals(ev.start_mono) or self._recent_arrivals(time.monotonic()))

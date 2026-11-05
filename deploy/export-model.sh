@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# Converts YOLO11n to ONNX (default), Coral (Edge TPU) or OpenVINO format (once).
+# Converts YOLO11n (or MODEL=yolo26n etc.) to ONNX (default), Coral (Edge TPU) or OpenVINO format (once).
 # Uses a temporary venv with PyTorch (CPU) and cleans it up afterwards.
 # Run as root in the LXC:
 #   bash /opt/camera-service/deploy/export-model.sh                 # yolo11n.onnx (ONNX Runtime, CPU)
 #   FORMAT=edgetpu bash /opt/camera-service/deploy/export-model.sh  # yolo11n_edgetpu.tflite (Coral)
 #   FORMAT=openvino bash /opt/camera-service/deploy/export-model.sh # yolo11n.xml (OpenVINO, iGPU)
+#   FORMAT=openvino MODEL=yolo26n SIZE=640 DEST=/root/out bash ...  # other model/size, elsewhere
 set -euo pipefail
 
 MODEL="${MODEL:-yolo11n}"
 SIZE="${SIZE:-320}"
 FORMAT="${FORMAT:-onnx}"
-DEST=/opt/camera-service/models
+DEST="${DEST:-/opt/camera-service/models}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export LANG=C.UTF-8 LC_ALL=C.UTF-8
@@ -34,19 +35,22 @@ fi
 
 echo "==> Exporting $MODEL to $FORMAT (input ${SIZE}px)"
 cd "$TMP"
+# YOLO26 exports end-to-end (without NMS) by default; the service expects the classic output
+E2E=""
+case "$MODEL" in yolo26*) E2E="end2end=False" ;; esac
 mkdir -p "$DEST"
 if [ "$FORMAT" = openvino ]; then
-  "$TMP/venv/bin/yolo" export model="$MODEL.pt" format=openvino imgsz="$SIZE" half=False
+  "$TMP/venv/bin/yolo" export model="$MODEL.pt" format=openvino imgsz="$SIZE" half=False $E2E
   cp "$TMP/${MODEL}_openvino_model/${MODEL}.xml" "$TMP/${MODEL}_openvino_model/${MODEL}.bin" "$DEST/"
   OUT="$DEST/${MODEL}.xml"
 elif [ "$FORMAT" = edgetpu ]; then
-  "$TMP/venv/bin/yolo" export model="$MODEL.pt" format=edgetpu imgsz="$SIZE"
+  "$TMP/venv/bin/yolo" export model="$MODEL.pt" format=edgetpu imgsz="$SIZE" $E2E
   SRC_TFLITE="$(find "$TMP" -name '*_edgetpu.tflite' | head -1)"
   [ -n "$SRC_TFLITE" ] || { echo "Converting for the Coral failed" >&2; exit 1; }
   cp "$SRC_TFLITE" "$DEST/${MODEL}_edgetpu.tflite"
   OUT="$DEST/${MODEL}_edgetpu.tflite"
 else
-  "$TMP/venv/bin/yolo" export model="$MODEL.pt" format=onnx imgsz="$SIZE" opset=17 simplify=True
+  "$TMP/venv/bin/yolo" export model="$MODEL.pt" format=onnx imgsz="$SIZE" opset=17 simplify=True $E2E
   cp "$TMP/${MODEL}.onnx" "$DEST/"
   OUT="$DEST/${MODEL}.onnx"
 fi

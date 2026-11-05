@@ -11,8 +11,10 @@ Everything runs locally; no video goes to the cloud.
   parked cars. Doubtful detections are double-checked on the sharp image.
 - **Faces** (optional): teach it who your housemates are, and answer "Who is this?" from a notification.
 - **Dutch licence plates** (optional); known cars get a name.
-- **Web page** with timeline, search ("package", a name, a plate), daily summary, live view, masks and
-  zones, and "Nothing to worry about" to ignore a false alarm from then on.
+- **Web page** with recordings per day, search ("package", a name, a plate), daily summary, live view,
+  masks and zones, and "Nothing to worry about" to ignore a false alarm from then on.
+- **Archive on a NAS** (optional): recordings move after 48 hours and are kept there longer.
+- **Intel iGPU** (optional): object detection and face recognition via OpenVINO.
 - **Home Assistant** via MQTT: sensors per camera, snapshots, a daily summary and ready-made
   blueprints for notifications.
 - **Log in with a passkey** (Face ID / Touch ID) when you make the page reachable over HTTPS with

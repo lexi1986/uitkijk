@@ -118,8 +118,6 @@
 
     /* daily summary */
     .daypick { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
-    .daypick input[type=date] { min-height: 2.25rem; font: inherit; font-size: .82rem; padding: .3rem .7rem; border-radius: var(--me-radius-pill); background: var(--me-surface); color: var(--me-text); border: 1px solid var(--me-border); color-scheme: dark; }
-    .daypick input[type=date].on { border-color: var(--me-primary-border); box-shadow: var(--me-glow-subtle); }
     .summary { background: var(--me-surface); border: 1px solid var(--me-border); border-radius: var(--me-radius-card); box-shadow: var(--me-shadow-card); padding: 1rem 1.1rem; margin-bottom: 1.25rem; display: grid; gap: .9rem; }
     .summary:empty { display: none; }
     .summary .txt { color: var(--me-text-secondary); font-size: .88rem; line-height: 1.45; }
@@ -128,6 +126,22 @@
     .stat b { display: block; font-size: 1.45rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--me-text); }
     .stat span { font-size: .74rem; color: var(--me-text-secondary); }
     .who-row { display: flex; flex-wrap: wrap; gap: .4rem; }
+
+    /* day bar */
+    .daybar { display: flex; align-items: center; gap: .5rem; margin-bottom: 1rem; }
+    .daybar .icon-btn:disabled { opacity: .35; cursor: default; }
+    .days { position: relative; display: flex; gap: .4rem; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; flex: 1; padding: .25rem .1rem; }
+    .days::-webkit-scrollbar { display: none; }
+    .dpill { flex: none; scroll-snap-align: center; display: grid; justify-items: center; gap: .1rem; min-width: 4.6rem; padding: .45rem .7rem; border-radius: var(--me-radius-md); background: var(--me-surface); border: 1px solid var(--me-border); color: var(--me-text-secondary); font-size: .78rem; transition: background var(--me-transition-fast), border-color var(--me-transition-fast), box-shadow var(--me-transition-normal); }
+    .dpill:hover { background: var(--me-surface-hover); color: var(--me-text); }
+    .dpill b { font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--me-text); }
+    .dpill .wd { text-transform: capitalize; }
+    .dpill[aria-pressed="true"] { background: var(--me-primary-tint); border-color: var(--me-primary-border); color: var(--me-text); box-shadow: var(--me-glow-subtle); }
+    .daybar input[type=date] { flex: none; width: 2.75rem; min-height: 2.75rem; padding: 0 .6rem; font: inherit; border-radius: var(--me-radius-md); background: var(--me-surface); color: var(--me-text); border: 1px solid var(--me-border); color-scheme: dark; }
+    .daybar input[type=date]::-webkit-datetime-edit { display: none; }
+    .daybar.searching .days, .daybar.searching .icon-btn { opacity: .4; }
+    .part { margin: 1.25rem 0 .6rem; display: flex; align-items: baseline; gap: .6rem; }
+    .part h3 { font-size: .95rem; font-weight: 600; }
 
     /* timeline */
     .day { margin: 1.5rem 0 .75rem; display: flex; align-items: baseline; gap: .75rem; }
@@ -288,7 +302,7 @@
     .chip.important[aria-pressed=true] { border-color: var(--me-primary-border); color: var(--me-text); }
     /* touch screens: everything at least 44px (Apple HIG) */
     @media (pointer: coarse) {
-      .chip, .btn, .pill.link, .daypick input[type=date] { min-height: 44px; }
+      .chip, .btn, .pill.link { min-height: 44px; }
       .tile-btn, .icon-btn { width: 44px; height: 44px; }
       .plate .btn, .ugroup .btn { min-height: 44px; font-size: .85rem; }
       .badge { font-size: .76rem; }
@@ -341,11 +355,15 @@
       <div class="daypick" role="group" aria-label="Day">
         <button class="chip filter-toggle" id="filterToggle" aria-expanded="false">Filter</button>
         <button class="chip important" id="importantChip" aria-pressed="true" title="Hides 'probably nothing' and your own car coming or going">Important only</button>
-        <button class="chip" data-day="0" aria-pressed="false">Today</button>
-        <button class="chip" data-day="1" aria-pressed="false">Yesterday</button>
-        <input type="date" id="dayInput" aria-label="Pick a day">
       </div>
     </div>
+
+    <nav class="daybar" id="daybar" aria-label="Pick a day">
+      <button class="icon-btn" id="dayOlder" aria-label="Previous day"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <div class="days" id="days"></div>
+      <button class="icon-btn" id="dayNewer" aria-label="Next day"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>
+      <input type="date" id="dayInput" aria-label="Pick a day in the calendar">
+    </nav>
 
     <section class="summary" id="summary" aria-live="polite"></section>
 
@@ -618,7 +636,7 @@
       if (state.person) p.set("person", state.person);
       if (state.plate) p.set("plate", state.plate);
       if (state.q) p.set("q", state.q);
-      if (state.day) p.set("day", state.day);
+      if (state.day && !state.q) p.set("day", state.day);
       if (state.important) p.set("important", "true");
       return `/api/events?${p}`;
     }
@@ -681,15 +699,53 @@
     const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return isoDay(d); };
     function setDay(day) {
-      state.day = day || null;
-      $("dayInput").value = state.day || "";
-      document.querySelectorAll("[data-day]").forEach((b) => b.setAttribute("aria-pressed", String(state.day === daysAgo(Number(b.dataset.day)))));
-      $("dayInput").classList.toggle("on", !!state.day && ![0, 1].some((n) => daysAgo(n) === state.day));
+      state.day = day || daysAgo(0);
+      $("dayInput").value = state.day;
+      renderDays();
       state.items = []; loadEvents(); loadSummary();
+    }
+    // day bar: today always, otherwise only days with recordings (old on the left, today on the right)
+    async function loadDays() {
+      const p = new URLSearchParams();
+      if (state.camera) p.set("camera", state.camera);
+      if (state.label) p.set("label", state.label);
+      try { state.days = (await api(`/api/days?${p}`)).days; } catch { return; }
+      renderDays();
+    }
+    function dayList() {
+      const list = (state.days || []).slice();
+      for (const d of [daysAgo(0), state.day]) if (d && !list.some((x) => x.day === d)) list.push({ day: d, count: 0 });
+      return list.sort((a, b) => a.day.localeCompare(b.day));
+    }
+    function renderDays() {
+      const list = dayList();
+      const short = (iso) => {
+        const d = new Date(`${iso}T12:00`);
+        const rel = dayLabel(d);
+        if (rel === "Today" || rel === "Yesterday") return [rel, d.toLocaleDateString(undefined, { day: "numeric", month: "short" })];
+        return [d.toLocaleDateString(undefined, { weekday: "short" }), d.toLocaleDateString(undefined, { day: "numeric", month: "short" })];
+      };
+      $("days").innerHTML = list.map((x) => {
+        const [wd, dm] = short(x.day);
+        return `<button class="dpill" data-day="${x.day}" aria-pressed="${x.day === state.day}" aria-label="${esc(dayLabel(new Date(`${x.day}T12:00`)))}, ${x.count} recordings"><span class="wd">${esc(wd)}</span><b>${x.count}</b><span>${esc(dm)}</span></button>`;
+      }).join("");
+      const i = list.findIndex((x) => x.day === state.day);
+      $("dayOlder").disabled = i <= 0;
+      $("dayNewer").disabled = i < 0 || i >= list.length - 1;
+      $("daybar").classList.toggle("searching", !!state.q);
+      // only scroll the bar itself sideways, never the page (it refreshes every 20 s)
+      const strip = $("days"), sel = strip.querySelector('[aria-pressed="true"]');
+      if (sel) strip.scrollLeft = sel.offsetLeft - (strip.clientWidth - sel.offsetWidth) / 2;
+    }
+    function stepDay(dir) {
+      const list = dayList();
+      const i = list.findIndex((x) => x.day === state.day);
+      const next = list[i + dir];
+      if (next) setDay(next.day);
     }
     async function loadSummary() {
       const el = $("summary");
-      if (!state.day) { el.innerHTML = ""; return; }
+      if (!state.day || state.q) { el.innerHTML = ""; return; }
       let s;
       try { s = await api(`/api/summary?day=${state.day}`); } catch { el.innerHTML = ""; return; }
       const known = Object.keys(s.people).length;
@@ -711,28 +767,43 @@
         </div>` : ""}
         <div class="txt">${esc(s.text)}${s.busiest_hour ? ` Busiest hour: ${s.busiest_hour}.` : ""}</div>`;
     }
-    document.querySelectorAll("[data-day]").forEach((b) => b.addEventListener("click", () => {
-      const d = daysAgo(Number(b.dataset.day));
-      setDay(state.day === d ? null : d);
-    }));
+    $("days").addEventListener("click", (ev) => { const b = ev.target.closest("[data-day]"); if (b) setDay(b.dataset.day); });
+    $("dayOlder").onclick = () => stepDay(-1);
+    $("dayNewer").onclick = () => stepDay(1);
     $("dayInput").addEventListener("change", () => setDay($("dayInput").value || null));
+    // left and right arrow switch days while the player is closed and you are not typing
+    document.addEventListener("keydown", (ev) => {
+      if ($("player").open || ev.target.closest("input, textarea, select, dialog")) return;
+      if (ev.key === "ArrowLeft") stepDay(-1);
+      if (ev.key === "ArrowRight") stepDay(1);
+    });
 
     function renderTimeline() {
       const tl = $("timeline");
       if (!state.items.length) {
-        tl.innerHTML = `<div class="empty"><h3>No recordings</h3>${state.q ? `Nothing found for “${esc(state.q)}”.` : state.camera || state.label || state.person || state.plate ? "Nothing found with this filter." : state.important ? "Nothing important. Turn off “Important only” to see everything." : "Nothing has been recorded yet."}</div>`;
+        tl.innerHTML = `<div class="empty"><h3>No recordings${state.q ? "" : ` on ${esc(dayLabel(new Date(`${state.day}T12:00`)).toLowerCase())}`}</h3>${state.q ? `Nothing found for “${esc(state.q)}”.` : state.camera || state.label || state.person || state.plate ? "Nothing found with this filter." : state.important ? "Nothing important. Turn off “Important only” to see everything." : "Nothing has been recorded yet."}</div>`;
         $("more").hidden = true;
         return;
       }
-      let html = "", lastDay = "";
+      // search spans all days: then per day; otherwise within the day per part of the day
+      const PARTS = [[18, "Evening", "18–24 h"], [12, "Afternoon", "12–18 h"], [6, "Morning", "6–12 h"], [0, "Night", "0–6 h"]];
+      const groupOf = (d) => state.q ? d.toDateString() : PARTS.find(([h]) => d.getHours() >= h)[0];
+      const heading = (d, n) => {
+        const cnt = `<span class="eyebrow">${n} ${n === 1 ? "recording" : "recordings"}</span>`;
+        if (state.q) return `<div class="day"><h2>${dayLabel(d)}</h2>${cnt}</div>`;
+        const [, name, hours] = PARTS.find(([h]) => d.getHours() >= h);
+        return `<div class="part"><h3>${name}</h3><span class="muted">${hours}</span>${cnt}</div>`;
+      };
+      let html = state.q ? "" : `<div class="day"><h2>${dayLabel(new Date(`${state.day}T12:00`))}</h2><span class="eyebrow">${state.total} ${state.total === 1 ? "recording" : "recordings"}</span></div>`;
+      let last = null;
       state.items.forEach((e, i) => {
         const d = new Date(e.start);
-        const key = d.toDateString();
-        if (key !== lastDay) {
-          if (lastDay) html += "</div>";
-          const n = state.items.filter((x) => new Date(x.start).toDateString() === key).length;
-          html += `<div class="day"><h2>${dayLabel(d)}</h2><span class="eyebrow">${n} ${n === 1 ? "recording" : "recordings"}</span></div><div class="grid">`;
-          lastDay = key;
+        const key = groupOf(d);
+        if (key !== last) {
+          if (last !== null) html += "</div>";
+          const n = state.items.filter((x) => groupOf(new Date(x.start)) === key).length;
+          html += heading(d, n) + `<div class="grid">`;
+          last = key;
         }
         const l = LABELS[e.label] || LABELS.motion;
         const snap = e.snapshot ? `style="background-image:url('/clips/${encodeURI(e.snapshot)}')"` : "";
@@ -1185,7 +1256,7 @@
     let qTimer = null;
     $("q").addEventListener("input", () => {
       clearTimeout(qTimer);
-      qTimer = setTimeout(() => { state.q = $("q").value.trim() || null; state.items = []; loadEvents(); }, 300);
+      qTimer = setTimeout(() => { state.q = $("q").value.trim() || null; state.items = []; loadEvents(); renderDays(); loadSummary(); }, 300);
     });
 
     // ---------- interaction ----------
@@ -1255,13 +1326,13 @@
       if (cam) {
         const name = cam.dataset.cam || null;
         state.camera = cam.classList.contains("cam") && state.camera === name ? null : name;
-        saveFilter(); renderChips(); renderCams(); state.items = []; loadEvents();
+        saveFilter(); renderChips(); renderCams(); state.items = []; loadEvents(); loadDays();
         return;
       }
       const lab = ev.target.closest("[data-label]");
       if (lab) {
         state.label = lab.dataset.label || null;
-        saveFilter(); renderChips(); state.items = []; loadEvents();
+        saveFilter(); renderChips(); state.items = []; loadEvents(); loadDays();
         return;
       }
       const item = ev.target.closest(".ev");
@@ -1320,7 +1391,13 @@
       if (qs.get("clip")) { await openClip(qs.get("clip")); return; }
       const cam = qs.get("camera");
       if (cam && state.cams.some((c) => c.name === cam)) {
-        state.camera = cam; renderChips(); renderCams(); state.items = [];
+        state.camera = cam; renderChips(); renderCams(); loadDays();
+        // go to the day of that camera's latest recording
+        let last;
+        try { last = (await api(`/api/events?camera=${encodeURIComponent(cam)}&limit=1`)).items[0]; } catch {}
+        state.day = last ? isoDay(new Date(last.start)) : daysAgo(0);
+        $("dayInput").value = state.day; renderDays(); loadSummary();
+        state.items = [];
         await loadEvents();
         if (qs.get("open") === "latest" && state.items.length) openEvent(0);
       }
@@ -1332,10 +1409,12 @@
       await Promise.all([loadFaces(), loadPlates()]);
       await loadStatus();
       renderChips();
+      state.day = daysAgo(0); $("dayInput").value = state.day; renderDays();
+      loadDays(); loadSummary();
       await loadEvents();
       await openDeepLink();
       setInterval(loadStatus, 5000);
-      setInterval(() => { if (!$("player").open && !document.hidden) loadEvents(); }, 20000);
+      setInterval(() => { if (!$("player").open && !document.hidden) { loadEvents(); loadDays(); } }, 20000);
       document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadStatus(); loadEvents(); } });
     })();
   </script>

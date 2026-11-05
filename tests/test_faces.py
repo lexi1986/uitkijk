@@ -116,3 +116,35 @@ def test_face_answer_from_notification(tmp_path):
     Service._on_face_answer(svc, other, None, True)
     assert rec.unknown.count() == 0
     Service._on_face_answer(svc, "000000000000", "Sam", False)     # already handled: no error
+
+
+def test_name_needs_most_frames_or_the_sharpest():
+    from camsvc.faces import FaceMatch, summarize
+    import numpy as np
+    e = np.array([1.0, 0, 0], np.float32)
+    m = lambda name, score, q: FaceMatch(name, score, b"", q, 0.1, e)
+    # stranger: sharpest frame without a name, 3 of 9 frames resemble Alex
+    stranger = [m(None, 0.17, 0.55)] + [m("Alex", 0.35, 0.3)] * 3 + [m(None, 0.1, 0.2)] * 5
+    assert summarize(stranger, 0.3)[0].name is None
+    # known person: the sharpest frame carries the name, even if most frames are doubtful
+    sam = [m("Sam", 0.35, 0.78)] + [m("Sam", 0.3, 0.4)] * 2 + [m(None, 0.2, 0.3)] * 4
+    assert summarize(sam, 0.3)[0].name == "Sam"
+    # known person: the sharpest frame is doubtful, but most frames match
+    alex = [m(None, 0.38, 0.5)] + [m("Alex", 0.45, 0.4)] * 11 + [m(None, 0.2, 0.3)] * 2
+    assert summarize(alex, 0.3)[0].name == "Alex"
+
+
+def test_learn_auto_skips_weak_embeddings(tmp_path):
+    import threading
+    import numpy as np
+    from camsvc.faces import ARCFACE, FaceGroup, FaceMatch, FaceRecognizer
+    r = FaceRecognizer.__new__(FaceRecognizer)
+    r.backend, r._lock, r.faces_dir = ARCFACE, threading.Lock(), tmp_path
+    r._names, r._mat = [], np.zeros((0, 3), np.float32)
+    r.reload = lambda: None
+    e = np.array([1.0, 0, 0], np.float32)
+    wood = FaceMatch("Sam", 0.6, b"x", 0.6, 0.3, e, norm=12.9)   # a piece of wood that resembled Sam
+    assert not r.learn_auto(FaceGroup("Sam", 0.6, wood, [wood]))
+    face = FaceMatch("Sam", 0.6, b"x", 0.6, 0.3, e, norm=21.0)
+    assert r.learn_auto(FaceGroup("Sam", 0.6, face, [face]))
+    assert len(list((tmp_path / "Sam" / "auto").glob("*.jpg"))) == 1

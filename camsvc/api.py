@@ -201,6 +201,13 @@ def create_app(svc: "Service") -> FastAPI:
                                         important)
         return {"total": total, "offset": offset, "items": items}
 
+    @app.get("/api/days")
+    def days(camera: str | None = None, label: str | None = None):
+        """Days with recordings and their count (newest first), for the day bar."""
+        if camera:
+            get_cam(camera)
+        return {"days": svc.store.days(camera, label or None)}
+
     @app.get("/api/summary")
     def summary(day: str | None = None):
         """Daily summary (today by default): counts, people, vehicles, packages and a text."""
@@ -208,7 +215,7 @@ def create_app(svc: "Service") -> FastAPI:
             d = parse_day(day)
         except ValueError as exc:
             raise HTTPException(400, "Date as YYYY-MM-DD") from exc
-        return summarize_day(svc.cfg.clips_dir, d, svc.plates.known if svc.plates else {})
+        return summarize_day(svc.store.roots(), d, svc.plates.known if svc.plates else {})
 
     @app.post("/api/events/false-alarm")
     def event_false(payload: dict = Body(...)):
@@ -231,7 +238,7 @@ def create_app(svc: "Service") -> FastAPI:
     @app.get("/api/ai-comparison")
     def ai_compare(days: int = 7):
         """External AI (HA) next to the local AI, over the last `days` days."""
-        return compare_ai(svc.cfg.clips_dir, parse_day(None), min(max(days, 1), 31))
+        return compare_ai(svc.store.roots(), parse_day(None), min(max(days, 1), 31))
 
     @app.get("/api/cameras/{name}/frame.jpg")
     def frame(name: str):
@@ -274,8 +281,8 @@ def create_app(svc: "Service") -> FastAPI:
         return svc.faces
 
     def clip_file(rel: str) -> Path:
-        target = (clips_root / rel).resolve()
-        if clips_root not in target.parents or not target.is_file():
+        target = svc.store.find(rel)
+        if target is None:
             raise HTTPException(404, "Not found")
         return target
 
@@ -448,7 +455,8 @@ def create_app(svc: "Service") -> FastAPI:
             "version": __version__,
             "mqtt_connected": svc.mqtt.connected.is_set() if svc.mqtt else None,   # None = no MQTT
             "storage": {"clips_dir": str(clips_root), "used_gb": round(svc.retention.used_gb, 2),
-                        "max_gb": svc.cfg.retention_max_gb, "retention_days": svc.cfg.retention_days},
+                        "max_gb": svc.cfg.retention_max_gb, "retention_days": svc.cfg.retention_days,
+                        "archive": svc.archive_status()},
             "detector": getattr(svc.detector, "device", None),
             "ai": svc.ai.status() if svc.ai else {"state": "off"},
             "health": svc.health_snapshot(),
@@ -541,9 +549,7 @@ def create_app(svc: "Service") -> FastAPI:
 
     @app.get("/clips/{path:path}")
     def clip(path: str):
-        target = (clips_root / path).resolve()
-        if clips_root not in target.parents or not target.is_file():
-            raise HTTPException(404, "Not found")
+        target = clip_file(path)
         if target.suffix not in (".mp4", ".jpg", ".json"):
             raise HTTPException(404, "Not found")
         media = {".mp4": "video/mp4", ".jpg": "image/jpeg", ".json": "application/json"}[target.suffix]

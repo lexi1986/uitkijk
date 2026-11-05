@@ -29,7 +29,7 @@ ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 # /etc/camera-service: the setup wizard writes config.yaml there
-ReadWritePaths=/clips /var/lib/camera-service /etc/camera-service
+ReadWritePaths=/clips /var/lib/camera-service /etc/camera-service -/archive
 
 [Install]
 WantedBy=multi-user.target

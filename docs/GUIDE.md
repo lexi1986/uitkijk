@@ -153,8 +153,11 @@ The log should show `main stream connected`, `sub stream connected` and
 
 - **Camera tiles** with **▶ Live** (via go2rtc, proxied through the service's own address because
   browsers block pages from talking to other LAN addresses).
-- **Timeline** with search (names, plates, AI description), filters, day picker and daily summary.
-  **Important only** (on by default) hides "probably nothing" and your own car coming or going.
+- **Recordings per day**: a day bar with the number of recordings per day (oldest left, today right),
+  arrows or the arrow keys to step through days, and a calendar for older days. Within a day the
+  recordings are grouped into evening, afternoon, morning and night, with the daily summary on top.
+  Searching (names, plates, AI description) covers all days. **Important only** (on by default) hides
+  "probably nothing" and your own car coming or going.
 - **Player** with faces, plates, the AI description and **Nothing to worry about** (see below).
 - **Manage**: storage, server health, settings and mask/zones per camera, AI comparison, passkeys.
   Settings apply immediately and are stored in `settings.json`, masks in `masks.json`, zones in
@@ -187,8 +190,18 @@ model. Note: the InsightFace models are for non-commercial use only (see [MODELS
 - **Best image per event**: for a confirmed person the service takes a sharp main-stream image every
   second, up to 8 attempts or until someone is recognised with confidence. Each face gets a quality
   score (size, sharpness, frontal); votes are combined per person.
+- **Searching the whole clip again**: after a person or doorbell event without a confidently
+  recognised face, the saved clip is searched every half second (first two minutes, one clip at a
+  time). A face that only briefly looked at the camera is then still found; the event is updated
+  without sending a new notification. A newly found face must appear in at least two frames.
+- **Checks against false faces**: YuNet sometimes takes wood, fabric or a backpack for a face. Faces
+  with a low quality score are ignored, and so are faces with a short ArcFace feature vector (a real,
+  sharp face gives a long one). A name only counts when most frames of that face carry it, or the
+  sharpest frame does.
 - **Learning automatically** (`faces.auto_learn`): confident, unambiguous faces that add something
-  new are stored in `faces/<name>/auto/` (max. 20 per person).
+  new are stored in `faces/<name>/auto/` (max. 20 per person). Only clearly real faces are learned,
+  because one wrongly learned image makes the next mistake more likely. Teach each person a few good
+  photos yourself; with only one or two, random blobs match that person first.
 - **Unknown faces** (`faces.collect_unknown`): faces without a name are kept 30 days in
   `faces_unknown/` and grouped per person. Under **Faces** pick a name for a group; the best photos
   are learned and all events get the name. "Ignore" discards the group.
@@ -207,6 +220,10 @@ model. Note: the InsightFace models are for non-commercial use only (see [MODELS
 - **"Who is this?"**: for a new unknown face (1st and 3rd time) the service sends
   `event_type: unknown_face`; the blueprint *who_is_this* shows buttons with known names, "New
   person…" and "Ignore" and sends the answer to `camsvc/server/face`.
+
+- **Clothing as a check**: when a face name is doubtful and only one person is in view, the clothing
+  is compared with what each person wore today. If it clearly matches someone else, the event gets
+  no name. Clothing is only remembered after a confidently recognised face.
 
 ## Zones, unknown vehicles and daily summary
 
@@ -277,12 +294,45 @@ never wait for it.
 `systemctl disable --now camsvc-ai-tunnel`, and remove the tunnel key from `authorized_keys` on the AI
 server.
 
+## Archive on a NAS
+
+Recording always goes to the local disk; after `local_hours` (default 48) events move to the
+archive folder, which has its own retention (`storage.archive` in the config). An event only leaves
+the local disk once its copy has the same size; if the NAS is offline everything stays local until
+it is back. The web page, clips and daily summaries search both places.
+
+On Proxmox, mount the NFS share on the **host** (an unprivileged container cannot mount NFS itself)
+and pass it on as a mount point:
+
+```bash
+mkdir -p /mnt/nas-camera
+echo "<nas-ip>:/volume1/<share> /mnt/nas-camera nfs soft,timeo=50,retrans=3,_netdev,nofail 0 0" >> /etc/fstab
+mount /mnt/nas-camera
+pct set <ID> -mp1 /mnt/nas-camera,mp=/archive,backup=0
+```
+
+`soft` keeps the service from hanging when the NAS is gone. The camera service runs as an unmapped
+user in the container: on a Synology set the NFS rule's squash to "Map all users to admin" and give
+that user read/write on the shared folder. `/archive` must be a real mount point, otherwise the
+archive is not used (so clips never pile up on the local disk by accident).
+
 ## Hardware acceleration
 
 - **Object model**: by default **ONNX Runtime on the CPU** (`yolo11n.onnx`); on an older Core i5 that
   is a few tens of milliseconds per frame, and only on motion. OpenVINO (`yolo11n.xml`,
   `FORMAT=openvino bash deploy/export-model.sh`) can use an Intel iGPU; the service tests it in a
   separate process first and only uses it when that test passes.
+- **On an iGPU, go bigger**: with OpenVINO on an Intel UHD 630 a YOLO model at 640 px takes about
+  25 ms per frame and finds people further away than 320 px, as long as the sub stream is at least
+  640 px wide. Export at that size (`FORMAT=openvino MODEL=yolo26n SIZE=640`) and set
+  `model.input_size: 640`. YOLO26n was slightly better than YOLO11n at nearby people in our tests.
+- **Faces on the iGPU too**: when the object model runs on the GPU, face detection (YuNet) and
+  recognition (ArcFace) move there as well: roughly 4 to 10 times less CPU time per face.
+- **OpenVINO crashes in an LXC container** ("free(): invalid next size" or a segfault right at
+  start): newer OpenVINO versions cannot handle a CPU set that does not start at 0 or has gaps, which
+  Proxmox gives a container with `cores: 2` (for example CPUs 3 and 7; check
+  `/sys/devices/system/cpu/online` inside the container). Pin it on the host with
+  `lxc.cgroup2.cpuset.cpus: 0-1` in `/etc/pve/lxc/<ID>.conf`.
 - **Decoding the sub stream**: the pip build of PyAV has no VAAPI, so the sub stream is decoded on the
   CPU (a few percent of one core at 640×360). `hwaccel: auto` uses hardware when the PyAV build
   supports it and silently falls back otherwise.

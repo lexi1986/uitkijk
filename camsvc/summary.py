@@ -27,18 +27,23 @@ def _known_plate(plate: str, names: dict[str, str]) -> str | None:
     return None
 
 
-def _day_events(clips_dir: Path, day: date) -> list[dict]:
-    events = []
-    for cam_dir in sorted(d for d in clips_dir.iterdir() if d.is_dir() and not d.name.startswith(".")):
-        for js in sorted((cam_dir / day.isoformat()).glob("*.json")):
-            try:
-                events.append(json.loads(js.read_text()))
-            except (OSError, ValueError):
-                continue
+def _day_events(clips_dir: Path | list[Path], day: date) -> list[dict]:
+    """Events of one day; clips_dir may also be a list (local plus archive)."""
+    events, seen = [], set()
+    for root in clips_dir if isinstance(clips_dir, list) else [clips_dir]:
+        for cam_dir in sorted(d for d in root.iterdir() if d.is_dir() and not d.name.startswith(".")):
+            for js in sorted((cam_dir / day.isoformat()).glob("*.json")):
+                if (cam_dir.name, js.name) in seen:
+                    continue
+                seen.add((cam_dir.name, js.name))
+                try:
+                    events.append(json.loads(js.read_text()))
+                except (OSError, ValueError):
+                    continue
     return sorted(events, key=lambda e: e.get("start", ""))
 
 
-def summarize_day(clips_dir: Path, day: date, plate_names: dict[str, str] | None = None) -> dict:
+def summarize_day(clips_dir: Path | list[Path], day: date, plate_names: dict[str, str] | None = None) -> dict:
     """Counts per label and camera, who came by, vehicles, packages and a short text.
     Probable false alarms (AI or user) are left out; only their number is reported."""
     plate_names = plate_names or {}
@@ -131,7 +136,7 @@ def _local_verdict(e: dict) -> bool | None:
     return not false_alarm(e.get("labels") or [e.get("label")], ai)
 
 
-def compare_ai(clips_dir: Path, until: date, days: int = 7) -> dict:
+def compare_ai(clips_dir: Path | list[Path], until: date, days: int = 7) -> dict:
     """Comparison week: per event the verdict of the external AI (notify yes/no, in HA) next to
     that of the local AI (did it see the person/object?). Shows where they disagree."""
     rows = []

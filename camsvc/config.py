@@ -177,6 +177,7 @@ class Config:
     model: dict[str, Any]
     cameras: list[CameraConfig] = field(default_factory=list)
     go2rtc_url: str | None = None   # live view on the web page via go2rtc
+    archive: dict[str, Any] | None = None   # older clips to a NAS (storage.archive)
     summary_time: str = "22:00"     # daily summary to HA (MQTT); empty = off
     ai: dict[str, Any] = field(default_factory=dict)   # descriptions by a local vision model
     auth: dict[str, Any] = field(default_factory=dict)  # passkey login: enabled, rp_id, origin, session_days
@@ -234,6 +235,20 @@ def _load_ai(raw: dict | None) -> dict[str, Any]:
     return ai
 
 
+def _archive(raw: dict | None) -> dict[str, Any] | None:
+    """storage.archive: {dir: /archive, local_hours: 48, retention_days: 60, max_gb: 2000}"""
+    if not raw or not raw.get("dir"):
+        return None
+    return {
+        "dir": Path(raw["dir"]),
+        "local_hours": float(raw.get("local_hours", 48)),
+        "retention_days": float(raw.get("retention_days", 60)),
+        "retention_days_by_label": {str(k): float(v) for k, v in
+                                    (raw.get("retention_days_by_label") or {}).items()},
+        "max_gb": float(raw.get("max_gb", 2000)),
+    }
+
+
 def load_config(path: str | Path) -> Config:
     raw = yaml.safe_load(Path(path).read_text()) or {}
 
@@ -273,6 +288,7 @@ def load_config(path: str | Path) -> Config:
         model=model,
         log_level=str(raw.get("log_level", "INFO")).upper(),
         go2rtc_url=str((raw.get("live") or {}).get("go2rtc_url") or "").rstrip("/") or None,
+        archive=_archive(storage.get("archive")),
         summary_time=str(raw.get("summary_time", "22:00") or ""),
         ai=_load_ai(raw.get("ai")),
         auth=_load_auth(raw.get("auth")),

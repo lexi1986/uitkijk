@@ -87,7 +87,8 @@ class PacketRing:
 
     @property
     def nbytes(self) -> int:
-        return sum(len(p.data) for p in self.packets)
+        # copy: the recording thread keeps appending packets meanwhile
+        return sum(len(p.data) for p in list(self.packets))
 
 
 class AudioTranscoder:

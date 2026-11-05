@@ -13,6 +13,7 @@ from .camera import Camera
 from .config import EDITABLE, Config, get_path, set_path
 from .events import EventStore
 from .mqtt import MqttBridge
+from .archive import Archive
 from .retention import RetentionWorker
 
 log = logging.getLogger(__name__)
@@ -93,6 +94,13 @@ class Service:
         self.retention = RetentionWorker(cfg.clips_dir, cfg.retention_days, cfg.retention_max_gb,
                                          self._after_cleanup,
                                          days_by_label=cfg.retention_days_by_label)
+        self.archive = None
+        if cfg.archive:
+            a = cfg.archive
+            self.archive = Archive(cfg.clips_dir, a["dir"], a["local_hours"], a["retention_days"],
+                                   a["max_gb"], self._after_cleanup,
+                                   days_by_label=a["retention_days_by_label"])
+            self.store.archive = self.archive
 
     def _rescue_parts(self) -> None:
         """Keep half-written clips from a previous run (crash, power cut) as events when they
@@ -196,7 +204,9 @@ class Service:
                       "See the guide: 'Face recognition'.", models_dir)
             return None
         try:
-            return FaceRecognizer(models_dir, self.cfg.state_dir / "faces")
+            # faces on the iGPU as soon as it already runs the object model
+            return FaceRecognizer(models_dir, self.cfg.state_dir / "faces",
+                                  gpu=getattr(self.detector, "device", None) == "GPU")
         except Exception as exc:  # noqa: BLE001
             log.error("Loading face recognition failed (%s)", exc)
             return None
@@ -295,6 +305,13 @@ class Service:
                 "motion": c.motion_active, **c.object_active, "loitering": c.loitering,
                 "face": c.face_name, "plate": c.plate}
 
+    def archive_status(self) -> dict | None:
+        if not self.archive:
+            return None
+        return {"dir": str(self.archive.dir), "reachable": self.archive.ok,
+                "used_gb": round(self.archive.used_gb, 2), "local_hours": self.archive.local_hours,
+                "retention_days": self.archive.max_days}
+
     def _after_cleanup(self) -> None:
         self.store.forget_missing()
         if self.mqtt:
@@ -312,6 +329,8 @@ class Service:
             self.mqtt.start([c.cfg for c in self.cameras.values()], self._on_switch, self._state,
                             self._on_trigger)
         self.retention.start()
+        if self.archive:
+            self.archive.start()
         self._stop_evt = threading.Event()
         if self.mqtt and self.cfg.summary_time:
             threading.Thread(target=self._summary_loop, name="daily-summary", daemon=True).start()
@@ -407,14 +426,14 @@ class Service:
                 today_at = time.monotonic()
                 try:
                     self.mqtt.publish_today(summarize_day(
-                        self.cfg.clips_dir, now.date(), self.plates.known if self.plates else {}))
+                        self.store.roots(), now.date(), self.plates.known if self.plates else {}))
                 except Exception:  # noqa: BLE001
                     log.exception("Building today's running total failed")
             if now.strftime("%H:%M") != self.cfg.summary_time or sent == now.date():
                 continue
             sent = now.date()
             try:
-                s = summarize_day(self.cfg.clips_dir, now.date(), self.plates.known if self.plates else {})
+                s = summarize_day(self.store.roots(), now.date(), self.plates.known if self.plates else {})
                 self.mqtt.publish_summary(s)
                 log.info("Daily summary sent: %s", s["text"])
             except Exception:  # noqa: BLE001
@@ -427,6 +446,8 @@ class Service:
         for cam in self.cameras.values():
             cam.stop()
         self.retention.stop()
+        if self.archive:
+            self.archive.stop()
         if self.ai:
             self.ai.stop()
         deadline = time.monotonic() + 20      # together within systemd's TimeoutStopSec

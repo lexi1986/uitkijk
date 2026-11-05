@@ -470,11 +470,12 @@ def test_likely_resident_after_arrival():
     from camsvc.camera import Camera
 
     now = _t.monotonic()
-    cam = SimpleNamespace(arrivals={"Alex": now - 60, "Sam": now - 4000}, bodies=None, name="hek")
+    cam = SimpleNamespace(arrivals={"Alex": now - 60, "Sam": now - 4000}, bodies=None, name="hek",
+                          faces=SimpleNamespace(backend=SimpleNamespace(learn=0.38)))
     cam._recent_arrivals = lambda n: Camera._recent_arrivals(cam, n)
     ev = SimpleNamespace(labels={"person"}, start_mono=now, body_emb=None, max_persons=1)
     assert Camera._likely_residents(cam, ev, [{"name": None}]) == ["Alex"]
-    assert Camera._likely_residents(cam, ev, [{"name": "Sam"}]) is None          # face recognised
+    assert Camera._likely_residents(cam, ev, [{"name": "Sam", "score": 0.5}]) is None   # face recognised
     assert Camera._likely_residents(cam, SimpleNamespace(labels={"vehicle"}, start_mono=now, body_emb=None), []) is None
     cam.arrivals.clear()
     assert Camera._likely_residents(cam, ev, []) is None
@@ -491,11 +492,15 @@ def test_clothing_remembered_and_matched(tmp_path):
     import threading
     m._lock, m._file, m._seen = threading.Lock(), tmp_path / "clothing.json", {}
     now = _t.monotonic()
-    cam = SimpleNamespace(arrivals={}, bodies=m, name="hek")
+    cam = SimpleNamespace(arrivals={}, bodies=m, name="hek",
+                          faces=SimpleNamespace(backend=SimpleNamespace(learn=0.38)))
     cam._recent_arrivals = lambda n: Camera._recent_arrivals(cam, n)
-    # face recognised at the doorbell: remember the clothing
+    # doubtful face: do not remember the clothing
     seen = SimpleNamespace(labels={"person"}, start_mono=now, body_emb=v(1, 0.1), max_persons=1)
-    assert Camera._likely_residents(cam, seen, [{"name": "Sam"}]) is None and "Sam" in m._seen
+    Camera._likely_residents(cam, seen, [{"name": "Sam", "score": 0.3}])
+    assert m._seen == {}
+    # face certainly recognised at the doorbell: remember the clothing
+    assert Camera._likely_residents(cam, seen, [{"name": "Sam", "score": 0.5}]) is None and "Sam" in m._seen
     # later from behind at the gate, same clothes
     back = SimpleNamespace(labels={"person"}, start_mono=now, body_emb=v(1, 0.3), max_persons=1)
     assert Camera._likely_residents(cam, back, [{"name": None}]) == ["Sam"]
@@ -504,8 +509,85 @@ def test_clothing_remembered_and_matched(tmp_path):
     # two people in view: do not remember (whose clothes are whose?)
     m._seen.clear()
     two = SimpleNamespace(labels={"person"}, start_mono=now, body_emb=v(1), max_persons=2)
-    Camera._likely_residents(cam, two, [{"name": "Sam"}])
+    Camera._likely_residents(cam, two, [{"name": "Sam", "score": 0.5}])
     assert m._seen == {}
+
+
+def test_clothing_overrules_doubtful_face(tmp_path):
+    import threading
+    import time as _t
+    from types import SimpleNamespace
+    from camsvc.camera import Camera
+    from camsvc.faces import FaceGroup, FaceMatch
+    from camsvc.reid import BodyMatcher
+
+    m = BodyMatcher.__new__(BodyMatcher)
+    m._lock, m._file = threading.Lock(), tmp_path / "clothing.json"
+    alex = np.array([1, 0, 0, 0], np.float32)
+    m._seen = {"Alex": [(_t.time(), alex)]}
+    cam = SimpleNamespace(bodies=m, name="carport", faces=SimpleNamespace(backend=SimpleNamespace(learn=0.38)))
+    face = FaceMatch("Sam", 0.3, b"", 0.5, 0.1, None)
+    ev = SimpleNamespace(body_emb=alex, max_persons=1)
+    doubtful = [FaceGroup("Sam", 0.3, face, [face])]
+    assert Camera._check_clothing(cam, doubtful, ev)[0].name is None
+    sure = [FaceGroup("Sam", 0.5, face, [face])]
+    assert Camera._check_clothing(cam, sure, ev)[0].name == "Sam"              # a certain face wins
+    assert Camera._check_clothing(cam, [FaceGroup("Alex", 0.3, face, [face])], ev)[0].name == "Alex"
+    two = SimpleNamespace(body_emb=alex, max_persons=2)
+    assert Camera._check_clothing(cam, doubtful, two)[0].name == "Sam"         # whose clothes?
+
+
+def test_archive_moves_old_events_and_store_finds_them(tmp_path):
+    from camsvc.archive import Archive
+    from camsvc.events import EventStore
+    local, nas = tmp_path / "clips", tmp_path / "nas"
+    nas.mkdir()
+    day = local / "carport" / "2026-11-01"
+    day.mkdir(parents=True)
+    old = time.time() - 72 * 3600
+    for name in ("080000_person.mp4", "080000_person.jpg", "080000_person.face1.jpg"):
+        (day / name).write_bytes(b"x" * 10)
+    (day / "080000_person.json").write_text(json.dumps({"camera": "carport", "label": "person"}))
+    for f in day.iterdir():
+        os.utime(f, (old, old))
+    (day / "120000_person.json").write_text("{}")   # recent: stays local
+
+    archive = Archive(local, nas, 48, 60, 100, lambda: None, require_mount=False)
+    archive.cycle()
+    assert archive.ok
+    assert sorted(p.name for p in day.iterdir()) == ["120000_person.json"]
+    moved = nas / "carport" / "2026-11-01" / "080000_person.mp4"
+    assert moved.read_bytes() == b"x" * 10
+    assert abs(moved.stat().st_mtime - old) < 2          # retention counts from the recording
+
+    store = EventStore(local, "")
+    store.archive = archive
+    assert store.find("carport/2026-11-01/080000_person.mp4") == moved.resolve()
+    (tmp_path / "outside.mp4").write_bytes(b"x")
+    assert store.find("../outside.mp4") is None
+    assert store.json_path("carport/2026-11-01/080000_person.mp4") is not None
+
+    archive.ok = False   # NAS gone: local only
+    assert store.find("carport/2026-11-01/080000_person.mp4") is None
+
+
+def test_archive_needs_a_real_mount(tmp_path):
+    from camsvc.archive import Archive
+    (tmp_path / "nas").mkdir()
+    a = Archive(tmp_path / "clips", tmp_path / "nas", 48, 60, 100, lambda: None)
+    assert not a.check()
+
+
+def test_store_days_counts_per_day(tmp_path):
+    from camsvc.events import EventStore
+    for rel in ("gate/2026-11-02/080000_person.json", "gate/2026-11-02/090000_vehicle.json",
+                "carport/2026-11-03/100000_person.json"):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("{}")
+    store = EventStore(tmp_path, "")
+    assert store.days() == [{"day": "2026-11-03", "count": 1}, {"day": "2026-11-02", "count": 2}]
+    assert store.days(label="person") == [{"day": "2026-11-03", "count": 1}, {"day": "2026-11-02", "count": 1}]
+    assert store.days(camera="gate") == [{"day": "2026-11-02", "count": 2}]
 
 
 def test_false_alarms_left_out_and_compared(tmp_path):

@@ -49,6 +49,22 @@ class EventStore:
         self.public_url = public_url
         self._recent: dict[str, deque[EventRecord]] = {}
         self._lock = threading.Lock()
+        self.archive = None   # Archive (NAS) with older events, when configured
+
+    def roots(self) -> list[Path]:
+        """Where events live: local, plus the archive when it is reachable."""
+        if self.archive is not None and self.archive.ok:
+            return [self.clips_dir, self.archive.dir]
+        return [self.clips_dir]
+
+    def find(self, rel: str) -> Path | None:
+        """File for a path relative to clips_dir, local or in the archive."""
+        for root in self.roots():
+            root = root.resolve()
+            path = (root / rel).resolve()
+            if root in path.parents and path.is_file():
+                return path
+        return None
 
     def load_recent(self, camera: str) -> None:
         """At startup, read the last events per camera from the JSON files."""
@@ -82,9 +98,7 @@ class EventStore:
 
     def json_path(self, clip_rel: str) -> Path | None:
         """JSON of an event for its clip (<camera>/<date>/<time>_<label>.mp4), inside clips_dir."""
-        js = (self.clips_dir / clip_rel).with_suffix(".json").resolve()
-        root = self.clips_dir.resolve()
-        return js if root in js.parents and js.is_file() else None
+        return self.find(str(Path(clip_rel).with_suffix(".json")))
 
     def update(self, js: Path, fields: dict) -> dict | None:
         """Update fields of a stored event, on disk and in the recent list."""
@@ -108,10 +122,12 @@ class EventStore:
         on disk and in the recent list."""
         if ".face" not in crop_rel:
             return False
-        js = self.clips_dir / (crop_rel.split(".face")[0] + ".json")
+        js = self.find(crop_rel.split(".face")[0] + ".json")
         try:
-            data = json.loads(js.read_text())
+            data = json.loads(js.read_text()) if js else None
         except (OSError, ValueError):
+            data = None
+        if data is None:
             return False
         for f in data.get("faces") or []:
             if f.get("crop") == crop_rel:
@@ -133,7 +149,7 @@ class EventStore:
         """After cleanup: drop events whose clip is gone from the list."""
         with self._lock:
             for cam, dq in self._recent.items():
-                kept = [r for r in dq if (self.clips_dir / r.clip).exists()]
+                kept = [r for r in dq if self.find(r.clip)]
                 self._recent[cam] = deque(kept, maxlen=LAST_N)
 
     def browse(self, camera: str | None = None, label: str | None = None,
@@ -144,20 +160,22 @@ class EventStore:
         """All events on disk, newest first, for the web page. Filters on camera and label via
         the path (<camera>/<date>/<time>_<label>[_n].json), so only the JSON files of the
         requested page need to be read."""
-        found: list[tuple[str, str, Path]] = []
-        cams = [camera] if camera else [d.name for d in self.clips_dir.iterdir()
-                                        if d.is_dir() and not d.name.startswith(".")]
-        for cam in cams:
-            cam_dir = self.clips_dir / cam
-            if not cam_dir.is_dir():
-                continue
-            for day_dir in cam_dir.iterdir():
-                if not day_dir.is_dir() or (day and day_dir.name != day):
+        seen: dict[tuple[str, str, str], Path] = {}
+        for root in self.roots():   # local first: while moving, an event briefly exists twice
+            cams = [camera] if camera else [d.name for d in root.iterdir()
+                                            if d.is_dir() and not d.name.startswith(".")]
+            for cam in cams:
+                cam_dir = root / cam
+                if not cam_dir.is_dir():
                     continue
-                for js in day_dir.glob("*.json"):
-                    if label and js.stem.split("_")[1:2] != [label]:
+                for day_dir in cam_dir.iterdir():
+                    if not day_dir.is_dir() or (day and day_dir.name != day):
                         continue
-                    found.append((day_dir.name, js.stem, js))
+                    for js in day_dir.glob("*.json"):
+                        if label and js.stem.split("_")[1:2] != [label]:
+                            continue
+                        seen.setdefault((day_dir.name, js.stem, cam), js)
+        found: list[tuple[str, str, Path]] = [(d, stem, js) for (d, stem, _), js in seen.items()]
         found.sort(key=lambda f: (f[0], f[1]), reverse=True)
         if person:
             # people are only in the JSON: read all of them then (at most a few hundred small
@@ -179,6 +197,27 @@ class EventStore:
                 continue
             page.append(asdict(r))
         return page, len(found)
+
+    def days(self, camera: str | None = None, label: str | None = None) -> list[dict]:
+        """Number of events per day (newest first), from the file names only: fast, also on a NAS."""
+        seen: set[tuple[str, str, str]] = set()
+        for root in self.roots():
+            cams = [camera] if camera else [d.name for d in root.iterdir()
+                                            if d.is_dir() and not d.name.startswith(".")]
+            for cam in cams:
+                cam_dir = root / cam
+                if not cam_dir.is_dir():
+                    continue
+                for day_dir in cam_dir.iterdir():
+                    if not day_dir.is_dir():
+                        continue
+                    for js in day_dir.glob("*.json"):
+                        if not label or js.stem.split("_")[1:2] == [label]:
+                            seen.add((day_dir.name, cam, js.stem))
+        counts: dict[str, int] = {}
+        for day, _cam, _stem in seen:
+            counts[day] = counts.get(day, 0) + 1
+        return [{"day": d, "count": n} for d, n in sorted(counts.items(), reverse=True)]
 
     @staticmethod
     def _has_person(js: Path, person: str) -> bool:
