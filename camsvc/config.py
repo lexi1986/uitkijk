@@ -16,7 +16,7 @@ import yaml
 # Labels the service knows, with the COCO classes that belong to them.
 LABEL_CLASSES: dict[str, set[int]] = {
     "person": {0},                   # person
-    "vehicle": {2, 3, 5, 7},         # car, motorcycle, bus, truck
+    "vehicle": {1, 2, 3, 5, 7},      # bicycle, car, motorcycle, bus, truck
     "animal": {14, 15, 16},          # bird, cat, dog
 }
 

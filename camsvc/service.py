@@ -90,6 +90,8 @@ class Service:
         for cam in self.cameras.values():
             cam.arrivals = self.arrivals
             cam.bodies = self.bodies
+            if self.mqtt:
+                cam.weather = self.mqtt.weather
 
         self.retention = RetentionWorker(cfg.clips_dir, cfg.retention_days, cfg.retention_max_gb,
                                          self._after_cleanup,
@@ -342,8 +344,11 @@ class Service:
         log.info("Uitkijk started with %d camera(s)", len(self.cameras))
 
     def health_snapshot(self) -> dict:
-        return self.health.snapshot(self.ai.state if self.ai else "off",
-                                    sum(c.online for c in self.cameras.values()), len(self.cameras))
+        return {**self.health.snapshot(self.ai.state if self.ai else "off",
+                                       sum(c.online for c in self.cameras.values()), len(self.cameras)),
+                "archive": ("off" if not self.archive
+                            else "reachable" if self.archive.ok else "not reachable"),
+                "faces_new": self.faces.recent_auto() if self.faces else 0}
 
     def _health_loop(self) -> None:
         """Every minute CPU, memory, disk and AI status to HA; after a crash one alert."""
@@ -351,9 +356,17 @@ class Service:
         if self.health.previous_crash:
             self.mqtt.publish_server_event("restart_after_crash", {
                 "started": self.health.started.isoformat(timespec="seconds")})
+        archive_ok = None   # first round only remember: no alert at startup
         while True:
             try:
                 self.mqtt.publish_health(self.health_snapshot())
+                # NAS gone or back: one server alert (clips stay local in the meantime)
+                if self.archive and archive_ok is not None and self.archive.ok != archive_ok:
+                    self.mqtt.publish_server_event(
+                        "archive_back" if self.archive.ok else "archive_unreachable",
+                        {"folder": str(self.archive.dir)})
+                if self.archive:
+                    archive_ok = self.archive.ok
             except Exception:  # noqa: BLE001
                 log.exception("Publishing health failed")
             if self._stop_evt.wait(60):
@@ -453,6 +466,8 @@ class Service:
         deadline = time.monotonic() + 20      # together within systemd's TimeoutStopSec
         for cam in self.cameras.values():
             cam.recorder.join(timeout=max(0.5, deadline - time.monotonic()))   # finish the clip
+        for cam in self.cameras.values():
+            cam.drain(max(0.5, deadline - time.monotonic()))                    # and process it
         if self.mqtt:
             self.mqtt.stop()
         self.health.clean_stop()

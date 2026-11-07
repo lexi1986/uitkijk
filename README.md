@@ -8,15 +8,21 @@ Everything runs locally; no video goes to the cloud.
 
 - **Recording with the seconds before**: a buffer of ~10 s, so you also see who was arriving.
 - **Detection** of people, vehicles and (optionally) animals, with filters against plants, shadows and
-  parked cars. Doubtful detections are double-checked on the sharp image.
+  parked cars. Doubtful detections are double-checked on the sharp image; at night (infrared) and in
+  bad weather everything is.
+- **Tracking** per person and vehicle: how long in view and which way it went; a parked car does not
+  start a recording.
 - **Faces** (optional): teach it who your housemates are, and answer "Who is this?" from a notification.
-- **Dutch licence plates** (optional); known cars get a name.
+- **Dutch licence plates** (optional); known cars get a name, a "home" sensor from their learned
+  parking spot, and a plate the AI description mentions counts too.
 - **Web page** with recordings per day, search ("package", a name, a plate), daily summary, live view,
-  masks and zones, and "Nothing to worry about" to ignore a false alarm from then on.
+  masks and zones, "New" badges for recordings you have not opened, and "Nothing to worry about" to
+  ignore a false alarm from then on.
 - **Archive on a NAS** (optional): recordings move after 48 hours and are kept there longer.
 - **Intel iGPU** (optional): object detection and face recognition via OpenVINO.
-- **Home Assistant** via MQTT: sensors per camera, snapshots, a daily summary and ready-made
-  blueprints for notifications.
+- **Home Assistant** via MQTT: sensors per camera and per zone, people/vehicles in view, "last seen"
+  per person, snapshots (also without boxes), a daily summary and ready-made blueprints for
+  notifications.
 - **Log in with a passkey** (Face ID / Touch ID) when you make the page reachable over HTTPS with
   your own domain.
 
@@ -86,6 +92,7 @@ There is also a script that creates a Debian container on Proxmox and installs e
 | [daily_summary](homeassistant/blueprints/automation/uitkijk/daily_summary.yaml) | Summary of the day at 22:00 |
 | [presence](homeassistant/blueprints/automation/uitkijk/presence.yaml) | No alarm when a resident just arrived home |
 | [server_health](homeassistant/blueprints/automation/uitkijk/server_health.yaml) | Notification on a crash, full disk or offline camera |
+| [weather](homeassistant/blueprints/automation/uitkijk/weather.yaml) | Stricter detection in rain, snow or strong wind |
 
 For "Notification services" enter your phone's notify action, e.g.
 `notify.mobile_app_sams_iphone` (found under Developer tools → Actions).

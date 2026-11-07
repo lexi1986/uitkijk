@@ -55,7 +55,10 @@ class Archive(threading.Thread):
                 continue
             # JSON last: the web page finds an event through its JSON
             for f in sorted(files, key=lambda p: p.suffix == ".json"):
-                self._move(f)
+                try:
+                    self._move(f)
+                except FileNotFoundError:   # cleaned up by retention in the meantime
+                    continue
             moved += 1
         return moved
 
@@ -84,6 +87,11 @@ class Archive(threading.Thread):
 
     def run(self) -> None:
         was_ok = None
+        # know reachability right away, but run the move half an interval after the cleanup
+        # (retention), so they never work in the same folders at the same time
+        self.check()
+        if self._stop.wait(self.interval / 2):
+            return
         while True:
             try:
                 self.cycle()

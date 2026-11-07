@@ -300,6 +300,14 @@ never wait for it.
 `systemctl disable --now camsvc-ai-tunnel`, and remove the tunnel key from `authorized_keys` on the AI
 server.
 
+**Describe old recordings again** after a prompt update (one frame per recording, from the clip;
+about 20 s each, best at night):
+
+```bash
+runuser -u camsvc -- /opt/camera-service/.venv/bin/python /opt/camera-service/deploy/redescribe.py \
+    --config /etc/camera-service/config.yaml
+```
+
 ## Archive on a NAS
 
 Recording always goes to the local disk; after `local_hours` (default 48) events move to the

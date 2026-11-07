@@ -17,6 +17,7 @@ import logging
 import re
 import shutil
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -41,7 +42,7 @@ DETECT_MAX_SIDE = 1920    # YuNet input at most this large; smaller makes distan
 NAME_RE = re.compile(r"^[\w][\w \-]{0,39}$")
 ID_RE = re.compile(r"[0-9a-f]{12}")
 
-AUTO_MAX = 20             # automatically learned photos per person (oldest are dropped)
+AUTO_MAX = 50             # automatically learned photos per person (oldest are dropped); more variety: cap, dusk, from above
 AUTO_QUALITY = 0.5        # only learn good images ...
 AUTO_MARGIN = 0.15        # ... that clearly belong to one person
 AUTO_DUPLICATE = 0.85     # already this similar to an existing photo: adds nothing
@@ -350,6 +351,11 @@ class FaceRecognizer:
             if auto:
                 out.setdefault(name, []).append(sid)
         return out
+
+    def recent_auto(self, days: float = 7) -> int:
+        """Number of automatically learned photos of the last days (to review now and then)."""
+        cutoff = time.time() - days * 86400
+        return sum(1 for _n, _s, auto, path in self._samples() if auto and path.stat().st_mtime >= cutoff)
 
     def sample_path(self, name: str, sample_id: str, auto: bool = False) -> Path | None:
         if not valid_name(name) or not ID_RE.fullmatch(sample_id):

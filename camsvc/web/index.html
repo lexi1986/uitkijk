@@ -132,14 +132,15 @@
     .daybar .icon-btn:disabled { opacity: .35; cursor: default; }
     .days { position: relative; display: flex; gap: .4rem; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; flex: 1; padding: .25rem .1rem; }
     .days::-webkit-scrollbar { display: none; }
-    .dpill { flex: none; scroll-snap-align: center; display: grid; justify-items: center; gap: .1rem; min-width: 4.6rem; padding: .45rem .7rem; border-radius: var(--me-radius-md); background: var(--me-surface); border: 1px solid var(--me-border); color: var(--me-text-secondary); font-size: .78rem; transition: background var(--me-transition-fast), border-color var(--me-transition-fast), box-shadow var(--me-transition-normal); }
+    .dpill { flex: none; scroll-snap-align: center; display: grid; justify-items: center; gap: .15rem; min-width: 3.6rem; padding: .35rem .55rem; line-height: 1.2; white-space: nowrap; border-radius: var(--me-radius-md); background: var(--me-surface); border: 1px solid var(--me-border); color: var(--me-text-secondary); font-size: .74rem; transition: background var(--me-transition-fast), border-color var(--me-transition-fast), box-shadow var(--me-transition-normal); }
     .dpill:hover { background: var(--me-surface-hover); color: var(--me-text); }
-    .dpill b { font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--me-text); }
+    .dpill b { font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--me-text); }
     .dpill .wd { text-transform: capitalize; }
     .dpill[aria-pressed="true"] { background: var(--me-primary-tint); border-color: var(--me-primary-border); color: var(--me-text); box-shadow: var(--me-glow-subtle); }
     .daybar input[type=date] { flex: none; width: 2.75rem; min-height: 2.75rem; padding: 0 .6rem; font: inherit; border-radius: var(--me-radius-md); background: var(--me-surface); color: var(--me-text); border: 1px solid var(--me-border); color-scheme: dark; }
     .daybar input[type=date]::-webkit-datetime-edit { display: none; }
     .daybar.searching .days, .daybar.searching .icon-btn { opacity: .4; }
+    @media (max-width: 520px) { #dayOlder, #dayNewer { display: none; } }   /* phone: swipe, more days visible */
     .part { margin: 1.25rem 0 .6rem; display: flex; align-items: baseline; gap: .6rem; }
     .part h3 { font-size: .95rem; font-weight: 600; }
 
@@ -255,6 +256,8 @@
     .badge.loiter { background: var(--me-danger-soft); color: var(--me-danger); }
     .ev.false-alarm .thumb { opacity: .55; }
     .ev .thumb .badge.false-alarm { left: auto; right: .55rem; top: .55rem; }
+    .ev .thumb .badge.new { top: auto; bottom: .55rem; background: var(--me-primary-soft); color: var(--me-primary); }
+    .day .seen-all { margin-left: auto; }
     .cmp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: .6rem; margin-bottom: 1rem; }
     .cmp-row { display: grid; grid-template-columns: 6.5rem 1fr; gap: .75rem; padding: .7rem 0; border-top: 1px solid var(--me-border); }
     .cmp-row img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: .5rem; background: var(--me-bg); }
@@ -306,6 +309,11 @@
       .tile-btn, .icon-btn { width: 44px; height: 44px; }
       .plate .btn, .ugroup .btn { min-height: 44px; font-size: .85rem; }
       .badge { font-size: .76rem; }
+      /* deleting a photo: a bigger circle, with an invisible edge around it up to 44px */
+      .samples { gap: .75rem; }
+      .sample img { width: 4.75rem; height: 4.75rem; }
+      .sample button { width: 1.9rem; height: 1.9rem; top: -.55rem; right: -.55rem; font-size: .85rem; }
+      .sample button::before { content: ""; position: absolute; inset: -7px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -640,10 +648,13 @@
       if (state.important) p.set("important", "true");
       return `/api/events?${p}`;
     }
+    let loadSeq = 0;
     async function loadEvents(reset = true) {
+      const seq = ++loadSeq;
       try {
         const limit = reset ? Math.max(PAGE, state.items.length) : PAGE;
         const data = await api(query(reset ? 0 : state.items.length, limit));
+        if (seq !== loadSeq) return;   // another day or filter was chosen meanwhile: ignore the old answer
         state.items = reset ? data.items : state.items.concat(data.items);
         state.total = data.total;
         renderTimeline();
@@ -719,23 +730,25 @@
     }
     function renderDays() {
       const list = dayList();
+      // two lines: "Today" / "Tue 3" and the count below it; the full date is in the label
       const short = (iso) => {
         const d = new Date(`${iso}T12:00`);
         const rel = dayLabel(d);
-        if (rel === "Today" || rel === "Yesterday") return [rel, d.toLocaleDateString(undefined, { day: "numeric", month: "short" })];
-        return [d.toLocaleDateString(undefined, { weekday: "short" }), d.toLocaleDateString(undefined, { day: "numeric", month: "short" })];
+        return rel === "Today" || rel === "Yesterday" ? rel
+          : `${d.toLocaleDateString(undefined, { weekday: "short" })} ${d.getDate()}`;
       };
-      $("days").innerHTML = list.map((x) => {
-        const [wd, dm] = short(x.day);
-        return `<button class="dpill" data-day="${x.day}" aria-pressed="${x.day === state.day}" aria-label="${esc(dayLabel(new Date(`${x.day}T12:00`)))}, ${x.count} recordings"><span class="wd">${esc(wd)}</span><b>${x.count}</b><span>${esc(dm)}</span></button>`;
-      }).join("");
+      $("days").innerHTML = list.map((x) => `<button class="dpill" data-day="${x.day}" aria-pressed="${x.day === state.day}" aria-label="${esc(dayLabel(new Date(`${x.day}T12:00`)))}, ${x.count} recordings" title="${esc(dayLabel(new Date(`${x.day}T12:00`)))}"><span class="wd">${esc(short(x.day))}</span><b>${x.count}</b></button>`).join("");
       const i = list.findIndex((x) => x.day === state.day);
       $("dayOlder").disabled = i <= 0;
       $("dayNewer").disabled = i < 0 || i >= list.length - 1;
       $("daybar").classList.toggle("searching", !!state.q);
       // only scroll the bar itself sideways, never the page (it refreshes every 20 s)
       const strip = $("days"), sel = strip.querySelector('[aria-pressed="true"]');
-      if (sel) strip.scrollLeft = sel.offsetLeft - (strip.clientWidth - sel.offsetWidth) / 2;
+      // and only when the chosen day changed: otherwise it jumps back while you scroll yourself
+      if (sel && state.centered !== state.day) {
+        strip.scrollLeft = sel.offsetLeft - (strip.clientWidth - sel.offsetWidth) / 2;
+        state.centered = state.day;
+      }
     }
     function stepDay(dir) {
       const list = dayList();
@@ -794,7 +807,8 @@
         const [, name, hours] = PARTS.find(([h]) => d.getHours() >= h);
         return `<div class="part"><h3>${name}</h3><span class="muted">${hours}</span>${cnt}</div>`;
       };
-      let html = state.q ? "" : `<div class="day"><h2>${dayLabel(new Date(`${state.day}T12:00`))}</h2><span class="eyebrow">${state.total} ${state.total === 1 ? "recording" : "recordings"}</span></div>`;
+      const unseen = state.items.filter((e) => e.seen === false).length;
+      let html = state.q ? "" : `<div class="day"><h2>${dayLabel(new Date(`${state.day}T12:00`))}</h2><span class="eyebrow">${state.total} ${state.total === 1 ? "recording" : "recordings"}${unseen ? ` · ${unseen} new` : ""}</span>${unseen ? '<button class="chip seen-all" id="seenAll">All seen</button>' : ""}</div>`;
       let last = null;
       state.items.forEach((e, i) => {
         const d = new Date(e.start);
@@ -809,7 +823,7 @@
         const snap = e.snapshot ? `style="background-image:url('/clips/${encodeURI(e.snapshot)}')"` : "";
         const names = [knownNames(e), ...(e.plates || []).map((p) => state.plates.known[p.plate] || p.plate)].filter(Boolean).join(", ");
         html += `<button class="ev${e.false_alarm ? " false-alarm" : ""}" data-i="${i}">
-          <div class="thumb" ${snap}><span class="badge l-${esc(e.label)}">${l.name}</span>${e.false_alarm ? `<span class="badge warn false-alarm">${e.false_alarm === "ai" ? "Probably nothing" : "Nothing"}</span>` : ""}<span class="dur">${fmtDur(e.duration)}</span></div>
+          <div class="thumb" ${snap}><span class="badge l-${esc(e.label)}">${l.name}</span>${e.false_alarm ? `<span class="badge warn false-alarm">${e.false_alarm === "ai" ? "Probably nothing" : "Nothing"}</span>` : ""}${e.seen === false ? '<span class="badge new">New</span>' : ""}<span class="dur">${fmtDur(e.duration)}</span></div>
           <div class="body"><span class="time">${fmtTime(e.start)}</span><span class="sub">${names ? `<span class="names">${esc(names)}</span> · ` : ""}${esc(camName(e.camera))}</span></div>
         </button>`;
       });
@@ -819,10 +833,17 @@
     }
 
     // ---------- player ----------
+    function markSeen(items) {
+      const clips = items.filter((e) => e.seen === false).map((e) => e.clip);
+      if (!clips.length) return;
+      items.forEach((e) => { if (e.seen === false) e.seen = true; });
+      fetch("/api/events/seen", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clips }) }).catch(() => {});
+    }
     function openEvent(i) {
       const e = state.items[i];
       if (!e) return;
       state.current = i;
+      if (e.seen === false) { markSeen([e]); renderTimeline(); }
       const l = LABELS[e.label] || LABELS.motion;
       const d = new Date(e.start);
       $("pTitle").innerHTML = `${esc(camName(e.camera))} <span class="badge l-${esc(e.label)}">${l.name}</span>`;
@@ -830,6 +851,7 @@
       $("pSub").textContent = `${dayLabel(d)}, ${fmtTimeS(e.start)} · ${fmtDur(e.duration)}`
         + (others.length ? ` · also ${others.join(", ")}` : "")
         + (e.zones?.length ? ` · zone ${e.zones.join(", ")}` : "")
+        + ((o) => o.length ? ` · ${[...new Set(o)].join(", ")}` : "")((e.objects || []).filter((x) => x.seconds >= 1).map((x) => `${x.label} ${x.direction}`))
         + (e.likely?.length ? ` · probably ${e.likely.join(", ")}` : "")
         + (e.false_alarm === "ai" ? " · probably nothing: the AI saw no one" : e.false_alarm ? " · marked as nothing to worry about" : "");
       $("pFalse").textContent = e.false_alarm ? "Important after all" : "Nothing to worry about";
@@ -1202,7 +1224,7 @@
         return `<div class="plate">
           ${p.crop ? `<img src="/clips/${encodeURI(p.crop)}" alt="">` : ""}
           <span class="plate-txt">${esc(p.plate)}</span>
-          <span class="nm">${name ? esc(name) : "Unknown vehicle"}</span>
+          <span class="nm">${name ? esc(name) : "Unknown vehicle"}${p.source === "ai" ? ' <span class="muted">· via AI</span>' : ""}</span>
           ${state.plates.enabled ? `<button class="btn" data-plate-name="${esc(p.plate)}">${name ? "Rename" : "Give a name"}</button>` : ""}
         </div>`;
       }).join("");
@@ -1261,6 +1283,7 @@
 
     // ---------- interaction ----------
     document.addEventListener("click", (ev) => {
+      if (ev.target.closest("#seenAll")) { markSeen(state.items); renderTimeline(); return; }
       if (ev.target.closest("#openManage")) { renderManage(); $("manageDlg").showModal(); return; }
       // opening another dialog from Manage: close Manage first
       if ($("manageDlg").open && $("manageDlg").contains(ev.target) && ev.target.closest("[data-settings],[data-mask],#openCompare,#openKeys")) $("manageDlg").close();
@@ -1388,6 +1411,7 @@
       if (![...qs.keys()].length) return;
       history.replaceState(null, "", "/");
       if (qs.get("live")) { openLive(qs.get("live")); return; }
+      if (qs.has("faces") && state.faces.enabled) { renderPeople(); $("peopleDlg").showModal(); return; }
       if (qs.get("clip")) { await openClip(qs.get("clip")); return; }
       const cam = qs.get("camera");
       if (cam && state.cams.some((c) => c.name === cam)) {
@@ -1414,7 +1438,16 @@
       await loadEvents();
       await openDeepLink();
       setInterval(loadStatus, 5000);
-      setInterval(() => { if (!$("player").open && !document.hidden) { loadEvents(); loadDays(); } }, 20000);
+      state.today = daysAgo(0);
+      setInterval(() => {
+        // after midnight: whoever was on 'today' moves along to the new day
+        if (daysAgo(0) !== state.today && !$("player").open) {
+          const wasToday = state.day === state.today;
+          state.today = daysAgo(0);
+          if (wasToday) { setDay(state.today); loadDays(); return; }
+        }
+        if (!$("player").open && !document.hidden) { loadEvents(); loadDays(); }
+      }, 20000);
       document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadStatus(); loadEvents(); } });
     })();
   </script>

@@ -8,6 +8,8 @@ from collections import Counter
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from .plates import closest_known
+
 PACKAGE_RE = re.compile(r"\b(package|parcel)", re.IGNORECASE)
 
 
@@ -16,15 +18,8 @@ def _time(iso: str) -> str:
 
 
 def _known_plate(plate: str, names: dict[str, str]) -> str | None:
-    """Match a plate to the known list, also with one misread character."""
-    if plate in names:
-        return plate
-    flat = plate.replace("-", "")
-    for known in names:
-        k = known.replace("-", "")
-        if len(k) == len(flat) and sum(a != b for a, b in zip(k, flat)) <= 1:
-            return known
-    return None
+    """Match a plate to the known list, also with misread characters."""
+    return plate if plate in names else closest_known(plate, names)
 
 
 def _day_events(clips_dir: Path | list[Path], day: date) -> list[dict]:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Callable
@@ -44,8 +45,14 @@ HEALTH_SENSORS = {
                      "icon": "mdi:harddisk"},
     "ai_server": {"name": "AI server", "icon": "mdi:robot-outline"},
     "cameras_online": {"name": "Cameras online", "state_class": "measurement", "icon": "mdi:cctv"},
+    "archive": {"name": "NAS archive", "icon": "mdi:nas"},
+    "faces_new": {"name": "Faces learned (7 days)", "state_class": "measurement",
+                  "icon": "mdi:face-recognition"},
 }
-SERVER_EVENTS = ["restart_after_crash"]
+# With these HA weather conditions (or strong wind) plants, drops and flakes move: look stricter
+BAD_WEATHER = {"rainy", "pouring", "snowy", "snowy-rainy", "hail", "lightning-rainy", "windy", "windy-variant"}
+WINDY_KMH = 30.0
+SERVER_EVENTS = ["restart_after_crash", "archive_unreachable", "archive_back"]
 
 SwitchHandler = Callable[[str, str, bool], None]  # (camera, switch, on)
 
@@ -60,6 +67,9 @@ class MqttBridge:
         self._switch_handler: SwitchHandler | None = None
         self._trigger_handler: Callable[[str, str], None] | None = None
         self._cameras: list[CameraConfig] = []
+        self._zone_keys: dict[str, set[str]] = {}   # per camera the announced zone sensors
+        self._lazy: set[str] = set()   # entities announced on first use (people, cars)
+        self.weather: dict = {"bad": False}   # shared with the cameras
         self._state_getter: Callable[[str], dict[str, bool]] | None = None
         self.face_handler = None       # (sample, name, ignore) from a phone notification
         self.presence_handler = None   # (name, home) from HA
@@ -100,6 +110,7 @@ class MqttBridge:
         client.subscribe(f"{self.prefix}/+/trigger", qos=1)          # e.g. doorbell button from HA
         client.subscribe(f"{self.prefix}/server/face", qos=1)         # naming a face from a notification
         client.subscribe(f"{self.prefix}/server/presence", qos=1)     # resident home/away from HA
+        client.subscribe(f"{self.prefix}/server/weather", qos=1)      # rain/wind from HA
         client.subscribe(f"{self.prefix}/server/external_ai", qos=1)  # verdict of the external AI
         client.subscribe(f"{self.discovery}/status", qos=1)  # HA restarted -> announce again
         self._announce_all()
@@ -110,7 +121,15 @@ class MqttBridge:
         self.connected.clear()
         log.warning("MQTT connection lost (%s), reconnecting…", reason_code)
 
-    def _on_message(self, client, _userdata, msg):
+    def _on_message(self, client, userdata, msg):
+        # paho stops its network thread on an exception in a callback (and keeps reporting
+        # 'connected'): never let anything escape
+        try:
+            self._handle_message(client, userdata, msg)
+        except Exception:  # noqa: BLE001
+            log.exception("Handling MQTT message on %s failed", msg.topic)
+
+    def _handle_message(self, client, _userdata, msg):
         topic = msg.topic
         payload = msg.payload.decode(errors="ignore").strip()
         if topic == f"{self.discovery}/status":
@@ -126,6 +145,19 @@ class MqttBridge:
                                   bool(data.get("ignore")))
             except (ValueError, AttributeError):
                 log.warning("Invalid face message: %s", payload[:100])
+            return
+        if topic == f"{self.prefix}/server/weather":
+            # {"condition": "rainy", "wind": 35.0}; retained too: the current weather applies at once
+            try:
+                data = json.loads(payload)
+                bad = (str(data.get("condition", "")) in BAD_WEATHER
+                       or float(data.get("wind") or 0) >= WINDY_KMH)
+                if bad != self.weather["bad"]:
+                    log.info("Weather: %s (%s, wind %s km/h)", "strict" if bad else "normal",
+                             data.get("condition"), data.get("wind"))
+                self.weather.update(bad=bad, condition=data.get("condition"))
+            except (ValueError, TypeError, AttributeError):
+                log.warning("Invalid weather message: %s", payload[:100])
             return
         if topic == f"{self.prefix}/server/presence" and self.presence_handler:
             # {"name": "Alex", "home": true}; skip retained messages at startup
@@ -272,6 +304,8 @@ class MqttBridge:
                 cfg["entity_category"] = category
             pub("binary_sensor", key, cfg)
 
+        self.announce_zones(cam)
+
         for key, name in SWITCHES.items():
             pub("switch", key, {
                 "name": name,
@@ -335,6 +369,26 @@ class MqttBridge:
             "device": dev,
             **self._avail(cam.name),
         })
+        pub("camera", "snapshot_clean", {
+            "name": "Snapshot without boxes",
+            "unique_id": f"camsvc_{cam.name}_snapshot_clean",
+            "default_entity_id": f"camera.cam_{cam.name}_snapshot_clean",
+            "topic": f"{base}/snapshot_clean",
+            "device": dev,
+            **self._avail(cam.name),
+        })
+        for lbl, name, icon in (("person", "People in view", "mdi:account-multiple"),
+                                ("vehicle", "Vehicles in view", "mdi:car-multiple")):
+            pub("sensor", f"count_{lbl}", {
+                "name": name,
+                "unique_id": f"camsvc_{cam.name}_count_{lbl}",
+                "default_entity_id": f"sensor.cam_{cam.name}_count_{lbl}",
+                "state_topic": f"{base}/count_{lbl}",
+                "state_class": "measurement",
+                "icon": icon,
+                "device": dev,
+                **self._avail(cam.name),
+            })
 
         pub("event", "event", {
             "name": "Event",
@@ -361,6 +415,81 @@ class MqttBridge:
         })
 
     # ------------------------------------------------------------------ publishing
+    @staticmethod
+    def zone_key(zone: str, label: str) -> str:
+        return "zone_" + re.sub(r"[^a-z0-9]+", "_", zone.lower()).strip("_") + "_" + label
+
+    def announce_zones(self, cam: "CameraConfig") -> None:
+        """An occupancy sensor per zone and label, e.g. binary_sensor.cam_carport_zone_driveway_vehicle.
+        Sensors of removed zones or labels are taken out of HA."""
+        wanted = {self.zone_key(z["name"], lbl): (z["name"], lbl)
+                  for z in cam.zones for lbl in cam.enabled_labels()}
+        for key in self._zone_keys.get(cam.name, set()) - set(wanted):
+            self.client.publish(self._cfg_topic("binary_sensor", cam.name, key), "", qos=1, retain=True)
+        for key, (zone, lbl) in wanted.items():
+            self.client.publish(self._cfg_topic("binary_sensor", cam.name, key), json.dumps({
+                "name": f"{zone} {lbl}",
+                "unique_id": f"camsvc_{cam.name}_{key}",
+                "default_entity_id": f"binary_sensor.cam_{cam.name}_{key}",
+                "state_topic": f"{self.prefix}/{cam.name}/{key}",
+                "device_class": "occupancy",
+                "device": self._device(cam),
+                **self._avail(cam.name),
+            }), qos=1, retain=True)
+        self._zone_keys[cam.name] = set(wanted)
+
+    @staticmethod
+    def slug(text: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
+
+    def _announce_once(self, topic: str, cfg: dict) -> None:
+        if topic not in self._lazy:
+            self.client.publish(topic, json.dumps(cfg), qos=1, retain=True)
+            self._lazy.add(topic)
+
+    def publish_seen(self, name: str, info: dict) -> None:
+        """When and where someone was last seen (a sensor per person, under the server)."""
+        key = self.slug(name)
+        state = f"{self.prefix}/server/seen/{key}"
+        self._announce_once(f"{self.discovery}/sensor/camsvc_server/seen_{key}/config", {
+            "name": f"{name} last seen",
+            "unique_id": f"camsvc_server_seen_{key}",
+            "default_entity_id": f"sensor.camera_last_seen_{key}",
+            "state_topic": state,
+            "value_template": "{{ value_json.time }}",
+            "json_attributes_topic": state,
+            "device_class": "timestamp",
+            "icon": "mdi:account-clock",
+            "device": {"identifiers": ["camsvc_server"], "name": "camera-service"},
+            **self._avail("server"),
+        })
+        self.client.publish(state, json.dumps({"name": name, **info}), qos=1, retain=True)
+
+    def publish_car(self, cam: str, plate: str, name: str, home: bool, since: str) -> None:
+        """Known car home or away (on its learned parking spot at this camera)."""
+        key = "car_" + self.slug(plate)
+        state = f"{self.prefix}/{cam}/{key}"
+        cfg = next((c for c in self._cameras if c.name == cam), None)
+        if cfg is not None:
+            self._announce_once(self._cfg_topic("binary_sensor", cam, key), {
+                "name": f"{name} home",
+                "unique_id": f"camsvc_{cam}_{key}",
+                "default_entity_id": f"binary_sensor.cam_{cam}_{key}",
+                "state_topic": state,
+                "value_template": "{{ value_json.state }}",
+                "json_attributes_topic": state,
+                "device_class": "presence",
+                "icon": "mdi:car",
+                "device": self._device(cfg),
+                **self._avail(cam),
+            })
+        self.client.publish(state, json.dumps({"state": "ON" if home else "OFF", "since": since,
+                                               "plate": plate, "name": name}), qos=1, retain=True)
+
+    def publish_zone(self, cam: str, zone: str, label: str, on: bool) -> None:
+        self.client.publish(f"{self.prefix}/{cam}/{self.zone_key(zone, label)}", "ON" if on else "OFF",
+                            qos=1, retain=True)
+
     def publish_binary(self, cam: str, key: str, on: bool) -> None:
         self.client.publish(f"{self.prefix}/{cam}/{key}", "ON" if on else "OFF", qos=1, retain=True)
 
@@ -388,8 +517,11 @@ class MqttBridge:
     def publish_face(self, cam: str, name: str) -> None:
         self.client.publish(f"{self.prefix}/{cam}/face", name, qos=1, retain=True)
 
-    def publish_snapshot(self, cam: str, jpg: bytes) -> None:
-        self.client.publish(f"{self.prefix}/{cam}/snapshot", jpg, qos=0, retain=True)
+    def publish_snapshot(self, cam: str, jpg: bytes, clean: bool = False) -> None:
+        self.client.publish(f"{self.prefix}/{cam}/snapshot{'_clean' if clean else ''}", jpg, qos=0, retain=True)
+
+    def publish_count(self, cam: str, label: str, n: int) -> None:
+        self.client.publish(f"{self.prefix}/{cam}/count_{label}", str(n), qos=1, retain=True)
 
     def publish_event(self, cam: str, record: "EventRecord") -> None:
         payload = {"event_type": record.label, **asdict(record), **record.urls(self.store.public_url)}

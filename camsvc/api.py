@@ -223,6 +223,16 @@ def create_app(svc: "Service") -> FastAPI:
             raise HTTPException(400, "Date as YYYY-MM-DD") from exc
         return summarize_day(svc.store.roots(), d, svc.plates.known if svc.plates else {})
 
+    @app.post("/api/events/seen")
+    def events_seen(payload: dict = Body(...)):
+        """Mark events as seen: {"clips": ["<camera>/<date>/<time>_<label>.mp4", ...]}."""
+        done = 0
+        for clip in list(payload.get("clips") or [])[:500]:
+            js = svc.store.json_path(str(clip))
+            if js and svc.store.update(js, {"seen": True}) is not None:
+                done += 1
+        return {"seen": done}
+
     @app.post("/api/events/false-alarm")
     def event_false(payload: dict = Body(...)):
         """Mark an event as a false alarm: {"clip": "<camera>/<date>/<time>_<label>.mp4", "false_alarm": true}.

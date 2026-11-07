@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -36,6 +37,17 @@ def _label(files: list[Path]) -> str | None:
     return parts[1] if len(parts) > 1 else None
 
 
+def _all_labels(files: list[Path]) -> list[str]:
+    """All labels of the event (from its JSON), so a vehicle event with a person gets the
+    retention of a person; without a readable JSON only the label from the name."""
+    js = files[0].parent / (files[0].name.split(".")[0] + ".json")
+    try:
+        labels = json.loads(js.read_text()).get("labels") or []
+    except (OSError, ValueError, AttributeError):
+        labels = []
+    return list(labels) or [_label(files)]
+
+
 def cleanup(clips_dir: Path, max_days: float, max_gb: float,
             days_by_label: dict[str, float] | None = None) -> tuple[int, float]:
     """Returns (number of removed events, total size in GB afterwards). Each label can have
@@ -48,6 +60,9 @@ def cleanup(clips_dir: Path, max_days: float, max_gb: float,
     remaining = []
     for mtime, files in groups:
         days = (days_by_label or {}).get(_label(files), max_days)
+        if mtime < now - days * 86400 and days_by_label:
+            # only read the JSON when deleting: another label may need to be kept longer
+            days = max(days_by_label.get(lbl, max_days) for lbl in _all_labels(files))
         if mtime < now - days * 86400:
             for f in files:
                 f.unlink(missing_ok=True)
@@ -55,7 +70,13 @@ def cleanup(clips_dir: Path, max_days: float, max_gb: float,
         else:
             remaining.append((mtime, files))
 
-    sizes = [(m, fs, sum(f.stat().st_size for f in fs if f.exists())) for m, fs in remaining]
+    def size(f: Path) -> int:
+        try:
+            return f.stat().st_size
+        except FileNotFoundError:   # moved by the archive in the meantime
+            return 0
+
+    sizes = [(m, fs, sum(size(f) for f in fs)) for m, fs in remaining]
     total = sum(s for _, _, s in sizes)
     limit = max_gb * 1024 ** 3
     for _m, files, size in sizes:  # oldest first

@@ -337,7 +337,7 @@ def test_verify_borderline_detections():
     cam = SimpleNamespace(cfg=SimpleNamespace(objects={"verify_below": 0.75}), _lock=threading.Lock(),
                           _verdicts=[Verdict("person", (0, 0, 20, 100), now + 60, False),
                                      Verdict("person", (300, 50, 340, 200), now + 60, True)],
-                          _verify_busy=True)
+                          _verify_busy=True, night=False, weather={"bad": False})
     sure = Detection("person", 0.9, (500, 50, 540, 200))
     pipe = Detection("person", 0.62, (1, 0, 21, 100))        # previously rejected spot
     walker = Detection("person", 0.6, (310, 55, 350, 205))   # confirmed, moved slightly
@@ -345,6 +345,9 @@ def test_verify_borderline_detections():
     car = Detection("vehicle", 0.6, (100, 100, 200, 200))
     kept = Camera._verify(cam, now, [sure, pipe, walker, new, car], (360, 640))
     assert kept == [sure, walker, car]
+    cam.night = True                                          # at night: check sure hits too
+    assert Camera._verify(cam, now, [sure, walker, car], (360, 640)) == [walker, car]
+    cam.night = False
     cam.cfg.objects["verify_below"] = 0
     assert Camera._verify(cam, now, [pipe], (360, 640)) == [pipe]
 
@@ -423,6 +426,7 @@ def test_unknown_plate_alerts():
     sent = []
     plates = SimpleNamespace(known={"GKB-31-R": "Family car"})
     plates.near_known = lambda p: PlateReader.near_known(plates, p)
+    plates.known_plate = lambda p: PlateReader.known_plate(plates, p)
     cam = SimpleNamespace(name="carport", plates=plates, _lock=threading.Lock(), _plate_watch=[],
                           mqtt=SimpleNamespace(publish_alert=lambda c, t, d: sent.append(d)),
                           store=SimpleNamespace(public_url="http://x"))
@@ -476,7 +480,8 @@ def test_likely_resident_after_arrival():
     ev = SimpleNamespace(labels={"person"}, start_mono=now, body_emb=None, max_persons=1)
     assert Camera._likely_residents(cam, ev, [{"name": None}]) == ["Alex"]
     assert Camera._likely_residents(cam, ev, [{"name": "Sam", "score": 0.5}]) is None   # face recognised
-    assert Camera._likely_residents(cam, SimpleNamespace(labels={"vehicle"}, start_mono=now, body_emb=None), []) is None
+    assert Camera._likely_residents(cam, SimpleNamespace(labels={"vehicle"}, start_mono=now, body_emb=None), []) == ["Alex"]
+    assert Camera._likely_residents(cam, SimpleNamespace(labels={"animal"}, start_mono=now, body_emb=None), []) is None
     cam.arrivals.clear()
     assert Camera._likely_residents(cam, ev, []) is None
 
@@ -734,3 +739,47 @@ def test_important_filter_hides_false_alarms_and_own_car(tmp_path):
     items, total = store.browse(names={"GKB-31-R": "Our car"}, important=True)
     assert total == 2 and [e["id"] for e in items] == ["3", "1"]
     assert store.browse(names={"GKB-31-R": "Our car"})[1] == 4
+
+
+def test_weather_message_sets_strict_mode():
+    from types import SimpleNamespace as NS
+    from camsvc.mqtt import MqttBridge
+    b = MqttBridge.__new__(MqttBridge)
+    b.prefix, b.discovery, b.weather = "camsvc", "homeassistant", {"bad": False}
+    msg = lambda p: NS(topic="camsvc/server/weather", payload=p.encode(), retain=True)
+    b._handle_message(None, None, msg('{"condition": "rainy", "wind": 10}'))
+    assert b.weather["bad"] is True
+    b._handle_message(None, None, msg('{"condition": "sunny", "wind": 12}'))
+    assert b.weather["bad"] is False
+    b._handle_message(None, None, msg('{"condition": "sunny", "wind": 42}'))   # storm without rain
+    assert b.weather["bad"] is True
+
+
+def test_closest_known_plate_tolerates_two_misreads():
+    from camsvc.plates import closest_known
+
+    known = {"GKB-31-R": "Family car", "XX-123-B": "Visitor"}
+    assert closest_known("GKB-71-P", known) == "GKB-31-R"
+    assert closest_known("GKB-37-R", known) == "GKB-31-R"
+    assert closest_known("GKT-71-P", known) is None
+    assert closest_known("AB-12-CD", known) is None
+
+
+def test_plates_in_text():
+    from camsvc.plates import plates_in_text
+
+    assert plates_in_text("A car with plate GKB 31 R is parked on the right.") == ["GKB-31-R"]
+    assert plates_in_text("A person walks by with a red bag.") == []
+
+
+def test_tracker_follows_and_gives_direction():
+    from types import SimpleNamespace as NS
+    from camsvc.tracker import Tracker
+
+    t = Tracker()
+    a = t.update(0.0, [NS(label="person", box=(100, 100, 150, 300))])[0]
+    b = t.update(1.0, [NS(label="person", box=(110, 140, 160, 340))])[0]
+    assert a is b
+    c = t.update(2.0, [NS(label="person", box=(120, 260, 170, 460))])[0]
+    assert c is a and a.direction(640, 480) == "towards the camera"
+    assert t.update(9.0, [NS(label="person", box=(120, 260, 170, 460))])[0] is not a   # gone too long

@@ -67,7 +67,10 @@ class Health:
             cur = _read(self._cgroup / "memory.current")
             limit = _read(self._cgroup / "memory.max")
             if cur and cur.isdigit():
-                used = int(cur)
+                # inactive file cache (freshly written clips) is freed by the kernel before an OOM kill
+                stat = _read(self._cgroup / "memory.stat") or ""
+                idle = next((int(r.split()[1]) for r in stat.splitlines() if r.startswith("inactive_file ")), 0)
+                used = max(int(cur) - idle, 0)
                 if limit and limit.isdigit():
                     return round(used / 1e6), round(100 * used / int(limit), 1)
                 total = self._meminfo_total()

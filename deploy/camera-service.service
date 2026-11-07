@@ -17,7 +17,7 @@ ExecStart=/opt/camera-service/.venv/bin/python -m camsvc --config /etc/camera-se
 Restart=always
 RestartSec=5
 # Limits memory so a fault cannot eat up the whole LXC
-MemoryMax=3G
+MemoryMax=4G
 TimeoutStopSec=30
 # new files (faces, clothing, clips) readable by the service only
 UMask=0077

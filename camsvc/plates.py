@@ -63,9 +63,37 @@ def normalize_nl(text: str) -> str | None:
     return best[1] if best else None
 
 
+MAX_MISREAD = 2   # a known plate when at most this many characters were read differently
+
+
+def closest_known(plate: str, known) -> str | None:
+    """Closest known plate, with at most MAX_MISREAD misread characters.
+    shortcut: a visitor with an almost identical plate counts as the known car; rare."""
+    flat = plate.replace("-", "")
+    diffs = [(sum(a != b for a, b in zip(k.replace("-", ""), flat)), k) for k in known
+             if len(k.replace("-", "")) == len(flat)]
+    best = min(diffs, default=None)
+    return best[1] if best and best[0] <= MAX_MISREAD else None
+
+
 def valid_plate(plate: str) -> bool:
     return normalize_nl(plate) == plate
 
+
+
+def plates_in_text(text: str) -> list[str]:
+    """Plates mentioned in a text ('car with plate GKB 31 R' -> ['GKB-31-R']). Only exact Dutch
+    plates with letters and digits, without 'corrected' characters: ordinary words drop out."""
+    found = []
+    words = re.findall(r"[A-Z0-9]+", (text or "").upper())
+    for i in range(len(words)):      # 1 to 3 adjacent words ('GKB 31 R', 'GKB-31-R', 'GKB31R')
+        for n in (1, 2, 3):
+            raw = "".join(words[i:i + n])
+            plate = normalize_nl(raw) if len(raw) == 6 else None
+            if (plate and plate.replace("-", "") == raw and any(c.isdigit() for c in raw)
+                    and any(c.isalpha() for c in raw) and plate not in found):
+                found.append(plate)
+    return found
 
 @dataclass
 class PlateRead:
@@ -115,14 +143,14 @@ class PlateReader:
     def name_of(self, plate: str) -> str | None:
         return self.known.get(plate)
 
+    def known_plate(self, plate: str) -> str | None:
+        """Known plate within MAX_MISREAD characters (typical misread, GKB/GKS)."""
+        return closest_known(plate, self.known)
+
     def near_known(self, plate: str) -> str | None:
-        """Known plate that differs by at most one character (typical misread, GKB/GKS)."""
-        flat = plate.replace("-", "")
-        for known, name in self.known.items():
-            k = known.replace("-", "")
-            if len(k) == len(flat) and sum(a != b for a, b in zip(k, flat)) <= 1:
-                return name
-        return None
+        """Name of the known plate within MAX_MISREAD characters."""
+        known = self.known_plate(plate)
+        return self.known[known] if known else None
 
     # ------------------------------------------------------------------ reading
     def _model(self):

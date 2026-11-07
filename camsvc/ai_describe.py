@@ -30,7 +30,7 @@ from .motion import build_mask
 
 log = logging.getLogger(__name__)
 
-PROMPT_VERSION = "en-1"   # English prompt and output; visibility flags; wider crop
+PROMPT_VERSION = "en-2"   # en-1: English prompt and output, visibility flags, wider crop; en-2: keywords
 
 DEFAULTS = {
     "enabled": False,
@@ -65,10 +65,13 @@ SYSTEM_PROMPT = (
 )
 USER_PROMPT = (
     "Describe this single camera snapshot factually in at most two short sentences. Mention "
-    "visible objects and uncertainties. Under 'attributes' give short, searchable attributes of "
-    "what is in view: for a person, clothing and what they wear or carry (e.g. 'blue jacket', "
-    "'package', 'backpack', 'safety vest'); for a vehicle, type, make and colour when visible "
-    "(e.g. 'white van', 'bicycle'); for an animal, the species (e.g. 'cat', 'blackbird'). No "
+    "visible objects and uncertainties. Under 'attributes' give separate lowercase search words, "
+    "each 1 to 3 words, without 'person:' or 'vehicle:' in front. Always name what is visible of: "
+    "clothing with colour (e.g. 'blue jacket', 'red sweater', 'cap', 'safety vest'); what someone "
+    "wears or carries ('backpack', 'bag', 'package', 'box', 'umbrella'); transport ('bicycle', "
+    "'cargo bike', 'scooter', 'pram', 'car', 'van', 'truck') with colour and make when visible; "
+    "animals with species ('cat', 'dog', 'bird'). Under 'objects' put only things, no true/false "
+    "values. No "
     "physical characteristics, age or gender. A box or detection percentage in the image is an "
     "overlay, not a confidence score of its own. Set person_visible, vehicle_visible and "
     "animal_visible to true only when (part of) a person, vehicle or animal is really visible; a "
@@ -208,8 +211,10 @@ def validate_output(content: str, grayscale: bool) -> dict:
                 isinstance(i, str) and len(i) <= spec["items"]["maxLength"] for i in items):
             raise AiError("invalid_response", "schema")
     out = {"description": whole_sentences(data["description"].strip()),
-           "objects": [i.strip() for i in data["objects"] if i.strip()],
-           "attributes": [i.strip() for i in data["attributes"] if i.strip()],
+           # the model sometimes puts the visibility flags as text in the lists: leave them out
+           "objects": [i.strip() for i in data["objects"] if i.strip() and "_visible" not in i],
+           "attributes": [i.strip().removeprefix("person:").removeprefix("vehicle:").strip()
+                          for i in data["attributes"] if i.strip() and "_visible" not in i],
            "image_quality": data["image_quality"],
            "uncertainties": [i.strip() for i in data["uncertainties"] if i.strip()],
            "infrared": grayscale,

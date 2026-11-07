@@ -1,0 +1,42 @@
+blueprint:
+  name: Uitkijk – pass on the weather
+  description: >-
+    Sends the current weather to Uitkijk. In rain, snow or strong wind (30 km/h or more) the cameras
+    look stricter, so moving plants and drops give fewer false alarms.
+  domain: automation
+  author: Uitkijk
+  source_url: https://github.com/lexi1986/uitkijk/blob/main/homeassistant/blueprints/automation/uitkijk/weather.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    weather:
+      name: Weather entity
+      selector:
+        entity:
+          domain: weather
+    topic_prefix:
+      name: MQTT prefix of Uitkijk
+      default: camsvc
+      selector:
+        text: {}
+
+mode: single
+
+variables:
+  weather: !input weather
+  prefix: !input topic_prefix
+
+triggers:
+  - trigger: state
+    entity_id: !input weather
+  - trigger: homeassistant
+    event: start
+  - trigger: time_pattern
+    minutes: "/15"
+
+actions:
+  - action: mqtt.publish
+    data:
+      topic: "{{ prefix }}/server/weather"
+      retain: true
+      payload: "{{ {'condition': states(weather), 'wind': state_attr(weather, 'wind_speed') | float(0)} | to_json }}"
