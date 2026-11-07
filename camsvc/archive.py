@@ -3,6 +3,9 @@
 Recording stays local: fast, and it keeps working when the NAS is off. An event only leaves
 the local disk once its copy in the archive has the same size; when the archive is not
 reachable, everything stays local until it is back. The archive has its own retention.
+
+Once a day, what the service has learned (faces, plates, parking spots, masks, settings) also
+goes to <archive>/backup as a tar.gz; the last BACKUP_KEEP are kept.
 """
 
 from __future__ import annotations
@@ -10,8 +13,10 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import tarfile
 import threading
 import time
+from datetime import date
 from pathlib import Path
 from typing import Callable
 
@@ -19,11 +24,17 @@ from .retention import _event_groups, cleanup
 
 log = logging.getLogger(__name__)
 
+BACKUP_KEEP = 14
+# crash marker, GPU cache; auth.json/pairing_code hold the session secret and do not belong on a
+# share (after a restore, pair a passkey again)
+BACKUP_SKIP = {"running", "intel", "auth.json", "pairing_code"}
+
 
 class Archive(threading.Thread):
     def __init__(self, clips_dir: Path, archive_dir: Path, local_hours: float, max_days: float,
                  max_gb: float, on_change: Callable[[], None], interval: float = 600,
-                 days_by_label: dict[str, float] | None = None, require_mount: bool = True):
+                 days_by_label: dict[str, float] | None = None, require_mount: bool = True,
+                 state_dir: Path | None = None):
         super().__init__(name="archive", daemon=True)
         self.clips_dir, self.dir = clips_dir, archive_dir
         self.local_hours, self.max_days, self.max_gb = local_hours, max_days, max_gb
@@ -31,6 +42,7 @@ class Archive(threading.Thread):
         self.on_change = on_change
         self.interval = interval
         self.require_mount = require_mount
+        self.state_dir = state_dir
         self.ok = False
         self.used_gb = 0.0
         self._stop = threading.Event()
@@ -75,9 +87,34 @@ class Archive(threading.Thread):
         tmp.replace(dst)
         src.unlink()
 
+    def backup_state(self) -> Path | None:
+        """No backup of state_dir in the archive today yet: make one."""
+        if self.state_dir is None:
+            return None
+        d = self.dir / "backup"
+        dst = d / f"state-{date.today():%Y-%m-%d}.tar.gz"
+        if dst.exists():
+            return None
+        d.mkdir(exist_ok=True)
+        tmp = d / (dst.name + ".tmp")
+        with tarfile.open(tmp, "w:gz") as tar:
+            for p in sorted(self.state_dir.iterdir()):
+                # no hidden folders (~/.cache with models) and no temporary files
+                if not p.name.startswith(".") and p.name not in BACKUP_SKIP and p.suffix != ".tmp":
+                    tar.add(p, arcname=p.name)
+        tmp.replace(dst)
+        for old in sorted(d.glob("state-*.tar.gz"))[:-BACKUP_KEEP]:
+            old.unlink(missing_ok=True)
+        log.info("Backup of %s to %s (%.0f kB)", self.state_dir, dst, dst.stat().st_size / 1e3)
+        return dst
+
     def cycle(self) -> None:
         if not self.check():
             return
+        try:
+            self.backup_state()
+        except OSError:
+            log.exception("Backup to the archive failed")
         moved = self.move_old()
         removed, self.used_gb = cleanup(self.dir, self.max_days, self.max_gb, self.days_by_label)
         if moved or removed:

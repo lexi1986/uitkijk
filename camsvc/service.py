@@ -101,7 +101,7 @@ class Service:
             a = cfg.archive
             self.archive = Archive(cfg.clips_dir, a["dir"], a["local_hours"], a["retention_days"],
                                    a["max_gb"], self._after_cleanup,
-                                   days_by_label=a["retention_days_by_label"])
+                                   days_by_label=a["retention_days_by_label"], state_dir=cfg.state_dir)
             self.store.archive = self.archive
 
     def _rescue_parts(self) -> None:

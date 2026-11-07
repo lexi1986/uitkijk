@@ -442,6 +442,12 @@ def test_unknown_plate_alerts():
     cam.detector = SimpleNamespace(detect=lambda *a: [Detection("vehicle", 0.9, (12, 12, 198, 150))])
     Camera._check_parked(cam, cam._plate_watch)
     assert sent[-1]["reason"] == "parked" and sent[-1]["plate"] == "XX-123-B"
+    # regular visitor: no daytime watch, still an alert at night
+    cam._plate_watch, visitor = [], [{"plate": "XX-123-B", "name": None, "crop": "b.jpg", "visitor": 4}]
+    Camera._check_unknown_plates(cam, ev(14), visitor)
+    assert cam._plate_watch == []
+    Camera._check_unknown_plates(cam, ev(23), visitor)
+    assert sent[-1]["visitor"] == 4 and sent[-1]["reason"] == "night"
 
 
 def test_day_summary(tmp_path):
@@ -783,3 +789,56 @@ def test_tracker_follows_and_gives_direction():
     c = t.update(2.0, [NS(label="person", box=(120, 260, 170, 460))])[0]
     assert c is a and a.direction(640, 480) == "towards the camera"
     assert t.update(9.0, [NS(label="person", box=(120, 260, 170, 460))])[0] is not a   # gone too long
+
+
+def test_archive_backs_up_state_once_a_day(tmp_path):
+    import tarfile
+    from camsvc.archive import BACKUP_KEEP, Archive
+    state = tmp_path / "state"
+    (state / "faces" / "Alex").mkdir(parents=True)
+    (state / "faces" / "Alex" / "1.jpg").write_bytes(b"x")
+    (state / "plates.json").write_text("{}")
+    (state / "auth.json").write_text("{}")
+    (state / ".cache").mkdir()
+    nas = tmp_path / "nas"
+    (nas / "backup").mkdir(parents=True)
+    for i in range(BACKUP_KEEP + 2):
+        (nas / "backup" / f"state-2000-01-{i + 1:02d}.tar.gz").write_bytes(b"")
+    a = Archive(tmp_path / "clips", nas, 48, 60, 100, lambda: None, require_mount=False, state_dir=state)
+    dst = a.backup_state()
+    assert dst and a.backup_state() is None                     # once a day
+    names = tarfile.open(dst).getnames()
+    assert "plates.json" in names and "faces/Alex/1.jpg" in names
+    assert "auth.json" not in names and ".cache" not in names
+    assert len(list((nas / "backup").glob("state-*.tar.gz"))) == BACKUP_KEEP
+
+
+def test_unknown_plate_becomes_regular_visitor(tmp_path):
+    from datetime import date
+    from camsvc.plates import VISITOR_DAYS, PlateReader
+    r = PlateReader(tmp_path)
+    d = date(2026, 11, 1)
+    assert r.visit("XX-123-B", d) == 1 and r.visit("XX-123-B", d) == 1   # same day counts once
+    assert r.visit("XX-123-B", date(2026, 11, 3)) == 2
+    assert PlateReader(tmp_path).visit("XX-123-B", date(2026, 11, 5)) == VISITOR_DAYS   # persisted
+    assert r.visit("XX-123-B", date(2027, 11, 5)) == 1                   # outside the window
+
+
+def test_face_search_continues_until_everyone_in_view_is_known():
+    import threading
+    from types import SimpleNamespace
+    from camsvc.camera import Camera
+    started = []
+    ev = SimpleNamespace(faces=[SimpleNamespace(name="Alex", score=0.5)], face_attempts=1, last_face_try=0.0, id="e1")
+    cam = SimpleNamespace(faces=SimpleNamespace(backend=SimpleNamespace(learn=0.38)), event=ev, _face_busy=False,
+                          cfg=SimpleNamespace(settings={"faces": {"attempts": 8, "interval_seconds": 1.0}}),
+                          name="driveway", _face_job=lambda *a: started.append(a))
+    orig = threading.Thread
+    threading.Thread = lambda target, args, **k: SimpleNamespace(start=lambda: target(*args))
+    try:
+        Camera._maybe_faces(cam, 5.0, (360, 640), [(0, 0, 10, 10)])                    # only Alex: done
+        assert not started
+        Camera._maybe_faces(cam, 5.0, (360, 640), [(0, 0, 10, 10), (20, 0, 30, 10)])   # someone joins
+        assert len(started) == 1 and ev.face_attempts == 2
+    finally:
+        threading.Thread = orig

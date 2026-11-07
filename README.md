@@ -14,11 +14,13 @@ Everything runs locally; no video goes to the cloud.
   start a recording.
 - **Faces** (optional): teach it who your housemates are, and answer "Who is this?" from a notification.
 - **Dutch licence plates** (optional); known cars get a name, a "home" sensor from their learned
-  parking spot, and a plate the AI description mentions counts too.
+  parking spot, and a plate the AI description mentions counts too. A plate seen on 3 or more
+  days becomes a "regular visitor" and no longer triggers the daytime alert.
 - **Web page** with recordings per day, search ("package", a name, a plate), daily summary, live view,
   masks and zones, "New" badges for recordings you have not opened, and "Nothing to worry about" to
   ignore a false alarm from then on.
-- **Archive on a NAS** (optional): recordings move after 48 hours and are kept there longer.
+- **Archive on a NAS** (optional): recordings move after 48 hours and are kept there longer. What
+  the service has learned (faces, plates, parking spots, settings) is backed up there daily too.
 - **Intel iGPU** (optional): object detection and face recognition via OpenVINO.
 - **Home Assistant** via MQTT: sensors per camera and per zone, people/vehicles in view, "last seen"
   per person, snapshots (also without boxes), a daily summary and ready-made blueprints for
@@ -88,7 +90,7 @@ There is also a script that creates a Debian container on Proxmox and installs e
 | [doorbell](homeassistant/blueprints/automation/uitkijk/doorbell.yaml) | Recording and notification on a doorbell ring, with the name when someone is recognised |
 | [loitering](homeassistant/blueprints/automation/uitkijk/loitering.yaml) | Urgent notification when an unknown person stays for a long time |
 | [who_is_this](homeassistant/blueprints/automation/uitkijk/who_is_this.yaml) | Name an unknown face from the notification |
-| [unknown_vehicle](homeassistant/blueprints/automation/uitkijk/unknown_vehicle.yaml) | Unknown plate at night, or during the day after 15 minutes |
+| [unknown_vehicle](homeassistant/blueprints/automation/uitkijk/unknown_vehicle.yaml) | Unknown plate at night, or during the day after 15 minutes (not for regular visitors) |
 | [daily_summary](homeassistant/blueprints/automation/uitkijk/daily_summary.yaml) | Summary of the day at 22:00 |
 | [presence](homeassistant/blueprints/automation/uitkijk/presence.yaml) | No alarm when a resident just arrived home |
 | [server_health](homeassistant/blueprints/automation/uitkijk/server_health.yaml) | Notification on a crash, full disk or offline camera |

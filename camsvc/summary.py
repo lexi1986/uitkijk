@@ -90,6 +90,7 @@ def summarize_day(clips_dir: Path | list[Path], day: date, plate_names: dict[str
         "packages": packages,
         "vehicles": sorted(vehicles.values(), key=lambda v: v["first"]),
         "busiest_hour": busiest,
+        "per_hour": [hours.get(f"{h:02d}", 0) for h in range(24)],
         "false_alarms": false_count,
     }
     out["text"] = summary_text(out)

@@ -24,7 +24,7 @@ from .detector import Detection, ObjectDetector, draw_detections
 from .events import EventRecord, EventStore, clip_paths
 from .faces import FaceGroup, FaceMatch, FaceRecognizer, summarize
 from .motion import MotionDetector, build_mask, motion_region, point_masked, zones_at
-from .plates import PlateRead, PlateReader, plates_in_text, vote
+from .plates import VISITOR_DAYS, PlateRead, PlateReader, plates_in_text, vote
 from .recorder import RTSP_OPTIONS, MainRecorder
 from .tracker import ObjectTrack, Tracker
 
@@ -811,7 +811,8 @@ class Camera:
         if (self.faces is None or ev is None or not boxes or self._face_busy
                 or ev.face_attempts >= int(fcfg["attempts"])
                 or now - ev.last_face_try < float(fcfg["interval_seconds"])
-                or any(f.name and f.score >= self.faces.backend.learn for f in ev.faces)):
+                or len({f.name for f in ev.faces if f.name and f.score >= self.faces.backend.learn})
+                >= len(boxes)):
             return                  # only stop once someone is recognised with confidence
         ev.face_attempts += 1
         ev.last_face_try = now
@@ -1303,6 +1304,12 @@ class Camera:
             plates.append({"plate": plate, "crop": str(crop.relative_to(self.clips_dir)) if best.crop_jpg else None,
                            "name": self.plates.name_of(plate) if self.plates else None,
                            "confidence": best.confidence, **({} if best.crop_jpg else {"source": "ai"})})
+            row = plates[-1]
+            # only real plate reads count; a misread of a known car is not a visitor
+            if self.plates and best.crop_jpg and not row["name"] and not self.plates.near_known(plate):
+                days = self.plates.visit(plate, ev.start_wall.date())
+                if days >= VISITOR_DAYS:
+                    row["visitor"] = days
         recognizer = self.faces
         groups = self._check_clothing(summarize(ev.faces, recognizer.backend.group if recognizer else 1.1), ev)
         faces = []
@@ -1345,8 +1352,9 @@ class Camera:
                         self._spot_pending[p["plate"]] = (ev.vehicle_box, time.monotonic())
         if recognizer is not None and groups:
             self._learn_faces(recognizer, groups, faces, ev.start_wall)
+        people = sum(1 for o in ev.objects.values() if o.label == "person") or 1
         if (recognizer is not None and ev.label in ("person", "doorbell")
-                and not any(g.name and g.score >= recognizer.backend.learn for g in groups)):
+                and len({g.name for g in groups if g.name and g.score >= recognizer.backend.learn}) < people):
             if _RESCAN_WAITING.acquire(blocking=False):
                 threading.Thread(target=self._rescan_faces, args=(ev, mp4, day_dir, base, bool(groups)),
                                  name=f"rescan-{self.name}", daemon=True).start()
@@ -1505,7 +1513,10 @@ class Camera:
             hour = ev.start_wall.hour
             if hour >= NIGHT_HOURS[0] or hour < NIGHT_HOURS[1]:
                 log.info("[%s] unknown vehicle %s at night", self.name, p["plate"])
-                self.mqtt.publish_alert(self.name, "unknown_vehicle", {**info, "reason": "night"})
+                self.mqtt.publish_alert(self.name, "unknown_vehicle",
+                                        {**info, "reason": "night", "visitor": p.get("visitor", 0)})
+            elif p.get("visitor"):   # regular visitor parking during the day: no alert
+                continue
             elif ev.vehicle_box is not None:
                 with self._lock:
                     self._plate_watch.append({**info, "box": ev.vehicle_box,

@@ -316,6 +316,48 @@
       .sample button::before { content: ""; position: absolute; inset: -7px; }
     }
 
+    /* ---------- polish: header, live dot, cards, hourly chart, motion ---------- */
+    header h1 { font-size: 2.1rem; background: linear-gradient(100deg, var(--me-text) 30%, var(--me-primary) 130%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .status-line { display: flex; align-items: center; gap: .5rem; margin-top: .35rem; font-size: .85rem; color: var(--me-text-secondary); }
+    .status-line b { color: var(--me-text); font-weight: 600; }
+    .dot.on { position: relative; }
+    .status-line .dot.on::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--me-success); animation: ping 2.4s cubic-bezier(0, 0, .2, 1) infinite; }
+    .status-line .dot.busy, .status-line .dot.busy::after { background: var(--me-primary); }
+    @keyframes ping { 70%, 100% { transform: scale(2.6); opacity: 0; } }
+    .cam .img { transition: transform .5s ease; }
+    .cam:hover .img, .ev:hover .thumb { transform: scale(1.035); }
+    .ev .thumb { transition: transform .5s ease; }
+    .ev { transition: background var(--me-transition-fast), border-color var(--me-transition-fast), transform var(--me-transition-normal), box-shadow var(--me-transition-normal); }
+    .ev:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0, 0, 0, .28); }
+    .ev.unseen { border-color: var(--me-primary-border); box-shadow: var(--me-glow-subtle); }
+    .ev .thumb::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 60%, var(--me-scrim-soft)); pointer-events: none; }
+    .ev .thumb .badge, .ev .thumb .dur { z-index: 1; }
+    /* labels on a photo: dark backing under the tint, otherwise unreadable on bright images */
+    .ev .thumb .badge { isolation: isolate; }
+    .ev .thumb .badge::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--me-scrim); z-index: -1; }
+    .rise { animation: rise .45s cubic-bezier(.2, .7, .2, 1) both; animation-delay: calc(var(--i, 0) * 35ms); }
+    @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+    dialog[open] { animation: pop .22s cubic-bezier(.2, .7, .2, 1); }
+    @keyframes pop { from { opacity: 0; transform: translateY(12px) scale(.985); } }
+    .stat { position: relative; overflow: hidden; }
+    .stat::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--acc, var(--me-border-strong)); }
+    .stat.zero { opacity: .5; }
+    .stat b { font-size: 1.6rem; }
+    .hours { display: grid; gap: .35rem; }
+    .hours .bars { display: flex; align-items: flex-end; gap: 3px; height: 3.2rem; }
+    .hours .bar { flex: 1; min-height: 3px; border-radius: 3px 3px 1px 1px; background: var(--me-elevated); }
+    .hours .bar.has { background: linear-gradient(180deg, var(--me-primary), rgba(57, 216, 244, .35)); }
+    .hours .bar.peak { box-shadow: var(--me-glow-subtle); }
+    .hours .bar.now { outline: 1px dashed var(--me-text-muted); outline-offset: 1px; }
+    @media (max-width: 560px) {
+      .sum-stats { grid-template-columns: repeat(3, 1fr); gap: .45rem; }
+      .stat { padding: .45rem .55rem; }
+      .stat b { font-size: 1.25rem; }
+      .stat span { font-size: .68rem; }
+      .stat.zero { display: none; }
+    }
+    .hours .axis { display: flex; justify-content: space-between; font-size: .68rem; color: var(--me-text-muted); font-variant-numeric: tabular-nums; }
+
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition: none !important; animation: none !important; }
     }
@@ -342,8 +384,9 @@
   <div class="wrap">
     <header>
       <div>
-        <div class="eyebrow">Uitkijk</div>
+        <div class="eyebrow" id="greet">Uitkijk</div>
         <h1>Cameras</h1>
+        <div class="status-line" id="statusLine"></div>
       </div>
       <div class="stats" id="stats"></div>
     </header>
@@ -568,7 +611,19 @@
 
     // ---------- cameras and status ----------
     const frames = {};   // last loaded frame per camera, against flicker
+    function renderStatusLine() {
+      const h = new Date().getHours();
+      const hi = h < 6 ? "Good night" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+      $("greet").textContent = `${hi} · ${new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}`;
+      const busy = state.cams.filter((c) => c.online && (c.motion || c.event_active));
+      const off = state.cams.filter((c) => !c.online);
+      $("statusLine").innerHTML = !state.cams.length ? ""
+        : busy.length ? `<span class="dot on busy"></span><span><b>Motion</b> at ${busy.map((c) => esc(c.friendly_name)).join(", ")}</span>`
+        : off.length === state.cams.length ? `<span class="dot off"></span><span><b>No cameras</b> reachable</span>`
+        : `<span class="dot on"></span><span><b>All quiet</b>${off.length ? ` · ${off.map((c) => esc(c.friendly_name)).join(", ")} offline` : ""}</span>`;
+    }
     function renderCams() {
+      renderStatusLine();
       $("cams").innerHTML = state.cams.map((c) => {
         const who = c.face && !["none", "unknown"].includes(c.face) ? `<span class="badge who">${esc(c.face)}</span>` : "";
         const badge = !c.online ? '<span class="badge offline">Offline</span>'
@@ -762,18 +817,25 @@
       let s;
       try { s = await api(`/api/summary?day=${state.day}`); } catch { el.innerHTML = ""; return; }
       const known = Object.keys(s.people).length;
-      const stat = (n, label) => `<div class="stat"><b>${n}</b><span>${label}</span></div>`;
+      const stat = (n, label, acc) => `<div class="stat${n ? "" : " zero"}" style="--acc:var(${acc})"><b>${n}</b><span>${label}</span></div>`;
+      const hours = s.per_hour || [];
+      const peak = Math.max(0, ...hours);
+      const nowH = state.day === isoDay(new Date()) ? new Date().getHours() : -1;
       el.innerHTML = `
         <div class="sum-stats">
-          ${stat(s.events, s.events === 1 ? "recording" : "recordings")}
-          ${stat(s.doorbell, "doorbell rings")}
-          ${stat(s.packages, s.packages === 1 ? "package" : "packages")}
-          ${stat(s.person_events, "with a person")}
-          ${stat(known, known === 1 ? "known person" : "known people")}
-          ${stat(s.unknown_faces, "unknown face")}
-          ${stat(s.vehicles.length, s.vehicles.length === 1 ? "vehicle" : "vehicles")}
-          ${s.false_alarms ? stat(s.false_alarms, "nothing to worry about") : ""}
+          ${stat(s.events, s.events === 1 ? "recording" : "recordings", "--me-primary")}
+          ${stat(s.doorbell, "doorbell rings", "--me-warning")}
+          ${stat(s.packages, s.packages === 1 ? "package" : "packages", "--me-warning")}
+          ${stat(s.person_events, "with a person", "--me-primary")}
+          ${stat(known, known === 1 ? "known person" : "known people", "--me-success")}
+          ${stat(s.unknown_faces, "unknown face", "--me-danger")}
+          ${stat(s.vehicles.length, s.vehicles.length === 1 ? "vehicle" : "vehicles", "--me-violet")}
+          ${s.false_alarms ? stat(s.false_alarms, "nothing to worry about", "--me-border-strong") : ""}
         </div>
+        ${peak ? `<div class="hours" role="img" aria-label="Recordings per hour, busiest hour ${s.busiest_hour}">
+          <div class="bars">${hours.map((n, h) => `<span class="bar${n ? " has" : ""}${n === peak ? " peak" : ""}${h === nowH ? " now" : ""}" style="height:${n ? Math.max(12, Math.round(100 * n / peak)) : 4}%" title="${h}:00 · ${n} ${n === 1 ? "recording" : "recordings"}"></span>`).join("")}</div>
+          <div class="axis"><span>0</span><span>6</span><span>12</span><span>18</span><span>24</span></div>
+        </div>` : ""}
         ${known || s.vehicles.length ? `<div class="who-row">
           ${Object.entries(s.people).map(([n, p]) => `<span class="pill">${esc(n)} <b>${p.count}×</b> ${p.first}${p.last !== p.first ? `–${p.last}` : ""}</span>`).join("")}
           ${s.vehicles.map((c) => `<span class="pill"><span class="plate-txt">${esc(c.plate)}</span> ${c.name ? esc(c.name) : "unknown"} · ${c.first}</span>`).join("")}
@@ -822,12 +884,16 @@
         const l = LABELS[e.label] || LABELS.motion;
         const snap = e.snapshot ? `style="background-image:url('/clips/${encodeURI(e.snapshot)}')"` : "";
         const names = [knownNames(e), ...(e.plates || []).map((p) => state.plates.known[p.plate] || p.plate)].filter(Boolean).join(", ");
-        html += `<button class="ev${e.false_alarm ? " false-alarm" : ""}" data-i="${i}">
+        html += `<button class="ev${e.false_alarm ? " false-alarm" : ""}${e.seen === false ? " unseen" : ""}" data-i="${i}">
           <div class="thumb" ${snap}><span class="badge l-${esc(e.label)}">${l.name}</span>${e.false_alarm ? `<span class="badge warn false-alarm">${e.false_alarm === "ai" ? "Probably nothing" : "Nothing"}</span>` : ""}${e.seen === false ? '<span class="badge new">New</span>' : ""}<span class="dur">${fmtDur(e.duration)}</span></div>
           <div class="body"><span class="time">${fmtTime(e.start)}</span><span class="sub">${names ? `<span class="names">${esc(names)}</span> · ` : ""}${esc(camName(e.camera))}</span></div>
         </button>`;
       });
       tl.innerHTML = html + "</div>";
+      // only animate in on a new day/filter, not on every refresh
+      const key = [state.day, state.q, state.camera, state.label, state.person, state.plate, state.important].join("|");
+      if (tl.dataset.key !== key) tl.querySelectorAll(".ev").forEach((el, n) => { el.classList.add("rise"); el.style.setProperty("--i", Math.min(n, 14)); });
+      tl.dataset.key = key;
       attachPreviews();
       $("more").hidden = state.items.length >= state.total;
     }
@@ -1224,7 +1290,7 @@
         return `<div class="plate">
           ${p.crop ? `<img src="/clips/${encodeURI(p.crop)}" alt="">` : ""}
           <span class="plate-txt">${esc(p.plate)}</span>
-          <span class="nm">${name ? esc(name) : "Unknown vehicle"}${p.source === "ai" ? ' <span class="muted">· via AI</span>' : ""}</span>
+          <span class="nm">${name ? esc(name) : p.visitor ? `Regular visitor <span class="muted">· ${p.visitor} days</span>` : "Unknown vehicle"}${p.source === "ai" ? ' <span class="muted">· via AI</span>' : ""}</span>
           ${state.plates.enabled ? `<button class="btn" data-plate-name="${esc(p.plate)}">${name ? "Rename" : "Give a name"}</button>` : ""}
         </div>`;
       }).join("");

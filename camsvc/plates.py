@@ -2,7 +2,8 @@
 reads the characters (fast-alpr, ONNX Runtime on the CPU). Dutch plates only: the text read
 must fit one of the Dutch sidecodes, with correction of typical misreads (O/0, B/8, S/5, ...).
 
-Known plates with a name are stored in <state_dir>/plates.json.
+Known plates with a name are stored in <state_dir>/plates.json; the days an unknown plate
+was seen in <state_dir>/visitors.json (regular visitors).
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import re
 import threading
 from collections import Counter
 from dataclasses import dataclass
+from datetime import date, timedelta
 from pathlib import Path
 
 import cv2
@@ -63,6 +65,8 @@ def normalize_nl(text: str) -> str | None:
     return best[1] if best else None
 
 
+VISITOR_DAYS = 3      # unknown plate seen on this many different days = regular visitor
+VISITOR_WINDOW = 60   # days
 MAX_MISREAD = 2   # a known plate when at most this many characters were read differently
 
 
@@ -108,6 +112,11 @@ class PlateReader:
         self._lock = threading.Lock()
         self._alpr = None
         self.known: dict[str, str] = self._load()
+        self._visits_file = state_dir / "visitors.json"
+        try:
+            self.visits: dict[str, list[str]] = json.loads(self._visits_file.read_text())
+        except (FileNotFoundError, ValueError):
+            self.visits = {}
 
     # ------------------------------------------------------------------ known plates
     def _load(self) -> dict[str, str]:
@@ -151,6 +160,18 @@ class PlateReader:
         """Name of the known plate within MAX_MISREAD characters."""
         known = self.known_plate(plate)
         return self.known[known] if known else None
+
+    def visit(self, plate: str, day: date) -> int:
+        """Unknown plate seen: on how many different days within the last VISITOR_WINDOW."""
+        start = (day - timedelta(days=VISITOR_WINDOW)).isoformat()
+        with self._lock:
+            days = {d for d in self.visits.get(plate, []) if d > start} | {day.isoformat()}
+            self.visits[plate] = sorted(days)
+            self.visits = {p: d for p, d in self.visits.items() if d and d[-1] > start}
+            tmp = self._visits_file.with_suffix(".tmp")
+            tmp.write_text(json.dumps(self.visits, indent=1))
+            tmp.replace(self._visits_file)
+            return len(days)
 
     # ------------------------------------------------------------------ reading
     def _model(self):
