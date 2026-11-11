@@ -6,9 +6,9 @@ Everything runs locally; no video goes to the cloud.
 
 *Uitkijk* is Dutch for "lookout".
 
-[![Uitkijk in 20 seconds](docs/media/uitkijk.jpg)](docs/media/uitkijk.mp4)
+https://github.com/user-attachments/assets/8344220f-8e5b-400d-9326-125d957ab507
 
-*A 20-second tour (click to play). The recordings shown are generated samples.*
+*A 20-second tour. The recordings shown are generated samples.*
 
 - **Recording with the seconds before**: a buffer of ~10 s, so you also see who was arriving.
 - **Detection** of people, vehicles and (optionally) animals, with filters against plants, shadows and
