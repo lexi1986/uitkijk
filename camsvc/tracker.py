@@ -9,11 +9,15 @@ per person instead of 'there was always someone'.
 from __future__ import annotations
 
 import itertools
-from dataclasses import dataclass
+import statistics
+from dataclasses import dataclass, field
 
 MAX_GAP = 4.0          # an object may be out of sight this long and still be the same one
 MIN_IOU = 0.2
 MOVE_FRAC = 0.1        # displacement (fraction of the frame) below which an object 'stays put'
+MIN_AREA = 0.001       # real people: 1% of detections were below 0.0023
+MAX_PERSON_RATIO = 1.2 # width/height; measured at most 0.89
+MIN_VEHICLE_RATIO = 0.5  # measured from 1.0 up
 _ids = itertools.count(1)
 
 
@@ -25,6 +29,14 @@ class ObjectTrack:
     last_seen: float
     first_box: tuple[int, int, int, int]
     box: tuple[int, int, int, int]
+    hits: list[tuple[float, float]] = field(default_factory=list)   # (time, score) of the latest detections
+
+    def confirmed(self, now: float, window: float, need: int, min_median: float = 0.0) -> bool:
+        """This one object seen often enough, and (median of the last 5, padded to 3) confident enough."""
+        if sum(1 for t, _ in self.hits if t >= now - window) < need:
+            return False
+        last = [s for _, s in self.hits[-5:]]
+        return statistics.median(last + [0.0] * (3 - len(last))) >= min_median
 
     def direction(self, width: int, height: int) -> str:
         """Direction of the bottom (feet/wheels) between the first and the last position."""
@@ -35,6 +47,18 @@ class ObjectTrack:
         if abs(dy) >= abs(dx):
             return "towards the camera" if dy > 0 else "away from the camera"
         return "to the right" if dx > 0 else "to the left"
+
+
+def plausible_shape(label: str, box: tuple[int, int, int, int], width: int, height: int) -> bool:
+    """No person wider than tall and no tiny object; an object touching the frame edge is cut off
+    and says nothing about its shape. Limits sit well outside what real recordings showed."""
+    w, h = box[2] - box[0], box[3] - box[1]
+    if w * h < MIN_AREA * width * height:
+        return False
+    if box[0] <= 1 or box[1] <= 1 or box[2] >= width - 2 or box[3] >= height - 2:
+        return True
+    ratio = w / max(h, 1)
+    return ratio <= MAX_PERSON_RATIO if label == "person" else ratio >= MIN_VEHICLE_RATIO if label == "vehicle" else True
 
 
 def _foot(box: tuple[int, int, int, int]) -> tuple[float, float]:

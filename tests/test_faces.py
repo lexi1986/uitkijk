@@ -97,6 +97,15 @@ def test_event_face_name_updated_on_disk(tmp_path):
     assert store.set_face_name(crop, "Sam")
     assert json.loads((day / "101010_person.json").read_text())["faces"][0]["name"] == "Sam"
     assert not store.set_face_name("deurbel/2026-11-02/nope.face1.jpg", "Sam")
+    other = "deurbel/2026-11-02/101010_person.face2.jpg"
+    data = json.loads((day / "101010_person.json").read_text())
+    data["faces"].append({"crop": other, "name": None})
+    (day / "101010_person.json").write_text(json.dumps(data))
+    assert store.remove_face(crop) == (True, "Sam")
+    assert [f["crop"] for f in json.loads((day / "101010_person.json").read_text())["faces"]] == [other]
+    assert store.remove_face(other) == (True, None)
+    assert json.loads((day / "101010_person.json").read_text())["faces"] is None
+    assert store.remove_face(other) == (False, None)
 
 
 def test_face_answer_from_notification(tmp_path):
@@ -143,8 +152,44 @@ def test_learn_auto_skips_weak_embeddings(tmp_path):
     r._names, r._mat = [], np.zeros((0, 3), np.float32)
     r.reload = lambda: None
     e = np.array([1.0, 0, 0], np.float32)
-    wood = FaceMatch("Sam", 0.6, b"x", 0.6, 0.3, e, norm=12.9)   # a piece of wood that resembled Sam
+    import cv2
+    color = cv2.imencode(".jpg", np.full((16, 16, 3), (80, 110, 170), np.uint8))[1].tobytes()
+    gray = cv2.imencode(".jpg", np.full((16, 16, 3), 120, np.uint8))[1].tobytes()
+    wood = FaceMatch("Sam", 0.6, color, 0.6, 0.3, e, norm=12.9)   # a piece of wood that resembled Sam
     assert not r.learn_auto(FaceGroup("Sam", 0.6, wood, [wood]))
-    face = FaceMatch("Sam", 0.6, b"x", 0.6, 0.3, e, norm=21.0)
+    night = FaceMatch("Sam", 0.6, gray, 0.6, 0.3, e, norm=21.0)   # do not learn from infrared
+    assert not r.learn_auto(FaceGroup("Sam", 0.6, night, [night]))
+    face = FaceMatch("Sam", 0.6, color, 0.6, 0.3, e, norm=21.0)
     assert r.learn_auto(FaceGroup("Sam", 0.6, face, [face]))
     assert len(list((tmp_path / "Sam" / "auto").glob("*.jpg"))) == 1
+
+
+def test_confirmed_weak_needs_a_run():
+    import numpy as np
+    from camsvc.faces import FaceMatch, confirmed_weak
+    e = np.array([1.0, 0, 0], np.float32)
+    m = lambda name: FaceMatch(name, 0.5, b"", 0.1, 0.3, e, 21.0, True)
+    assert confirmed_weak([(1.0, m("Sam")), (1.5, m("Sam"))]) == []
+    assert len(confirmed_weak([(1.0, m("Sam")), (1.5, m("Sam")), (2.0, m("Sam"))])) == 3
+    assert confirmed_weak([(1.0, m("Sam")), (1.5, m("Noor")), (2.0, m("Sam"))]) == []
+    assert confirmed_weak([(1.0, m("Sam")), (5.0, m("Sam")), (9.0, m("Sam"))]) == []
+
+
+def test_forget_like_removes_only_near_duplicates(tmp_path):
+    import threading
+    import cv2
+    import numpy as np
+    from camsvc.faces import FaceRecognizer
+    r = FaceRecognizer.__new__(FaceRecognizer)
+    r._lock, r.faces_dir = threading.Lock(), tmp_path
+    r.reload = lambda: None
+    r._raw_embed = lambda img: img.reshape(-1, 3).mean(0).astype(np.float32)   # colour as the 'face'
+    jpg = lambda bgr: cv2.imencode(".jpg", np.full((16, 16, 3), bgr, np.uint8))[1].tobytes()
+    (tmp_path / "Sam" / "auto").mkdir(parents=True)
+    (tmp_path / "Sam" / "auto" / "aaaaaaaaaaaa.jpg").write_bytes(jpg((200, 40, 40)))   # same image
+    (tmp_path / "Sam" / "bbbbbbbbbbbb.jpg").write_bytes(jpg((40, 40, 200)))            # another image
+    (tmp_path / "Noor").mkdir()
+    (tmp_path / "Noor" / "cccccccccccc.jpg").write_bytes(jpg((200, 40, 40)))           # another person
+    assert r.forget_like("Sam", jpg((200, 40, 40))) == 1
+    assert not (tmp_path / "Sam" / "auto").exists()
+    assert (tmp_path / "Sam" / "bbbbbbbbbbbb.jpg").exists() and (tmp_path / "Noor" / "cccccccccccc.jpg").exists()

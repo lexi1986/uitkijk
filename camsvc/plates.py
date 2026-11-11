@@ -173,6 +173,21 @@ class PlateReader:
             tmp.replace(self._visits_file)
             return len(days)
 
+    def forget_visit(self, plate: str, day: date) -> None:
+        """A misread plate does not count as a visit on that day.
+        shortcut: drops the whole day, even if it really came by again that day (rare)."""
+        with self._lock:
+            days = [d for d in self.visits.get(plate, []) if d != day.isoformat()]
+            if days == self.visits.get(plate, []):
+                return
+            if days:
+                self.visits[plate] = days
+            else:
+                self.visits.pop(plate, None)
+            tmp = self._visits_file.with_suffix(".tmp")
+            tmp.write_text(json.dumps(self.visits, indent=1))
+            tmp.replace(self._visits_file)
+
     # ------------------------------------------------------------------ reading
     def _model(self):
         # load on first use: the models (~15 MB) are then downloaded once to ~/.cache

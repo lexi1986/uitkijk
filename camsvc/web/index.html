@@ -125,7 +125,12 @@
     .stat { background: var(--me-elevated); border: 1px solid var(--me-border); border-radius: var(--me-radius-md); padding: .6rem .75rem; }
     .stat b { display: block; font-size: 1.45rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--me-text); }
     .stat span { font-size: .74rem; color: var(--me-text-secondary); }
+    .ev .likely { color: var(--me-text-secondary); font-style: italic; }
     .who-row { display: flex; flex-wrap: wrap; gap: .4rem; }
+    .sum-pick { font: inherit; font-size: .78rem; color: inherit; cursor: pointer; border: 1px solid var(--me-border); min-height: 2rem; }
+    .sum-pick:hover { border-color: var(--me-primary-border); }
+    .sum-pick:is(.on) { background: var(--me-primary-tint); border-color: var(--me-primary-border); box-shadow: var(--me-glow-subtle); }
+    .sum-pick:focus-visible { outline: 2px solid var(--me-primary); outline-offset: 2px; }
 
     /* day bar */
     .daybar { display: flex; align-items: center; gap: .5rem; margin-bottom: 1rem; }
@@ -209,6 +214,11 @@
     .faces { display: flex; gap: .6rem; flex-wrap: wrap; padding: .7rem 1rem; border-top: 1px solid var(--me-border); align-items: flex-start; }
     .faces:empty { display: none; }
     .face { display: flex; flex-direction: column; align-items: center; gap: .35rem; width: 6.2rem; }
+    .face { position: relative; }
+    :is(.face, .plate) .del { position: absolute; top: -.2rem; right: .35rem; width: 1.75rem; height: 1.75rem; display: grid; place-items: center; border-radius: 50%; background: var(--me-elevated); color: var(--me-text-secondary); border: 1px solid var(--me-border); cursor: pointer; font-size: 1rem; line-height: 1; }
+    :is(.face, .plate) .del::before { content: ""; position: absolute; inset: -.5rem; }
+    :is(.face, .plate) .del:hover { color: var(--me-danger); border-color: var(--me-danger); }
+    :is(.face, .plate) .del:focus-visible { outline: 2px solid var(--me-primary); outline-offset: 2px; }
     .face img { width: 4.5rem; height: 4.5rem; border-radius: 50%; object-fit: cover; border: 2px solid var(--me-border-strong); background: var(--me-bg); }
     .face.known img { border-color: var(--me-primary); }
     .face .nm { font-size: .78rem; font-weight: 600; text-align: center; }
@@ -219,6 +229,8 @@
     .plate-txt { display: inline-block; font-family: var(--me-font); font-weight: 700; letter-spacing: .04em; color: var(--nl-plate-text); background: var(--nl-plate-bg); border-radius: .3rem; padding: .05rem .4rem; border-left: .45rem solid var(--nl-plate-band); font-size: .78rem; }
     .plate { display: flex; flex-direction: column; align-items: center; gap: .35rem; min-width: 7.5rem; }
     .plate img { height: 2.6rem; max-width: 9rem; border-radius: .35rem; border: 1px solid var(--me-border-strong); background: var(--me-bg); object-fit: contain; }
+    .plate { position: relative; }
+    .plate .del { top: -.45rem; right: -.2rem; }
     .plate .nm { font-size: .78rem; font-weight: 600; color: var(--me-violet); }
     .plate .btn { font-size: .72rem; padding: .25rem .6rem; }
     [hidden] { display: none !important; }
@@ -257,7 +269,16 @@
     .ev.false-alarm .thumb { opacity: .55; }
     .ev .thumb .badge.false-alarm { left: auto; right: .55rem; top: .55rem; }
     .ev .thumb .badge.new { top: auto; bottom: .55rem; background: var(--me-primary-soft); color: var(--me-primary); }
-    .day .seen-all { margin-left: auto; }
+    .ev .thumb .badge.high { left: auto; right: .55rem; top: .55rem; background: var(--me-danger-soft); color: var(--me-danger); }
+    .day .day-actions { margin-left: auto; display: flex; gap: .4rem; }
+    @media (max-width: 640px) { .badge.high .why { display: none; } }
+    .ev.sel { border-color: var(--me-primary); box-shadow: var(--me-glow-subtle); }
+    .ev.sel .thumb::before { content: "✓"; position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; font-size: 2rem; font-weight: 700; color: var(--me-primary); background: rgba(9, 14, 24, .55); }
+    .selbar { position: fixed; left: 50%; bottom: max(1rem, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 30; display: none; align-items: center; gap: .5rem; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 1.5rem); padding: .6rem .8rem; border-radius: var(--me-radius-card); background: var(--me-elevated); border: 1px solid var(--me-primary-border); box-shadow: var(--me-shadow-card); }
+    .selbar.show { display: flex; }
+    .selbar b { font-variant-numeric: tabular-nums; padding: 0 .3rem; }
+    .btn.danger { color: var(--me-danger); border-color: var(--me-danger-soft); }
+    .btn.danger:hover { border-color: var(--me-danger); }
     .cmp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: .6rem; margin-bottom: 1rem; }
     .cmp-row { display: grid; grid-template-columns: 6.5rem 1fr; gap: .75rem; padding: .7rem 0; border-top: 1px solid var(--me-border); }
     .cmp-row img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: .5rem; background: var(--me-bg); }
@@ -405,6 +426,7 @@
       <div class="chips" id="personChips" role="group" aria-label="Person"></div>
       <div class="daypick" role="group" aria-label="Day">
         <button class="chip filter-toggle" id="filterToggle" aria-expanded="false">Filter</button>
+        <button class="chip important" id="nearChip" aria-pressed="false" title="Hides recordings where the object is small in view, such as passers-by on the street">Nearby</button>
         <button class="chip important" id="importantChip" aria-pressed="true" title="Hides 'probably nothing' and your own car coming or going">Important only</button>
       </div>
     </div>
@@ -445,12 +467,21 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
         </button>
       </div>
-      <button class="btn" id="pFalse" title="Nothing to worry about: ignore this spot for this kind of object from now on">Nothing to worry about</button>
+      <button class="btn" id="pFalse" title="Nothing to worry about: ignore this spot for this kind of object from now on (N)">Nothing to worry about</button>
+      <button class="btn danger" id="pDelete" title="Delete this recording for good (Delete)">Delete</button>
       <a class="btn" id="pDownload" download>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg>Download
       </a>
     </div>
   </dialog>
+
+  <div class="selbar" id="selBar" role="toolbar" aria-label="Selected recordings">
+    <span><b id="selCount">0</b> selected</span>
+    <button class="btn" data-sel-act="seen">Seen</button>
+    <button class="btn" data-sel-act="false">Nothing to worry about</button>
+    <button class="btn danger" data-sel-act="delete">Delete</button>
+    <button class="btn" id="selDone">Done</button>
+  </div>
 
   <dialog id="peopleDlg" aria-labelledby="peopleTitle">
     <div class="player-head">
@@ -586,8 +617,9 @@
       state.person = saved.person || null;
       state.plate = saved.plate || null;
       state.important = saved.important !== false;
+      state.near = !!saved.near;
     } catch {}
-    const saveFilter = () => { try { localStorage.setItem("camsvc-filter", JSON.stringify({ camera: state.camera, label: state.label, person: state.person, plate: state.plate, important: state.important })); } catch {} };
+    const saveFilter = () => { try { localStorage.setItem("camsvc-filter", JSON.stringify({ camera: state.camera, label: state.label, person: state.person, plate: state.plate, important: state.important, near: state.near })); } catch {} };
 
     async function api(path) {
       const r = await fetch(path, { cache: "no-store" });
@@ -651,6 +683,7 @@
     }
     function renderChips() {
       $("importantChip").setAttribute("aria-pressed", String(state.important));
+      $("nearChip").setAttribute("aria-pressed", String(!!state.near));
       const active = [state.camera, state.label, state.person, state.plate].filter(Boolean).length;
       $("filterToggle").innerHTML = `Filter${active ? ` <b>${active}</b>` : ""}`;
       $("camChips").innerHTML = [{ name: null, friendly_name: "All cameras" }, ...state.cams].map((c) =>
@@ -701,6 +734,7 @@
       if (state.q) p.set("q", state.q);
       if (state.day && !state.q) p.set("day", state.day);
       if (state.important) p.set("important", "true");
+      if (state.near) p.set("near", "true");
       return `/api/events?${p}`;
     }
     let loadSeq = 0;
@@ -836,9 +870,10 @@
           <div class="bars">${hours.map((n, h) => `<span class="bar${n ? " has" : ""}${n === peak ? " peak" : ""}${h === nowH ? " now" : ""}" style="height:${n ? Math.max(12, Math.round(100 * n / peak)) : 4}%" title="${h}:00 · ${n} ${n === 1 ? "recording" : "recordings"}"></span>`).join("")}</div>
           <div class="axis"><span>0</span><span>6</span><span>12</span><span>18</span><span>24</span></div>
         </div>` : ""}
-        ${known || s.vehicles.length ? `<div class="who-row">
-          ${Object.entries(s.people).map(([n, p]) => `<span class="pill">${esc(n)} <b>${p.count}×</b> ${p.first}${p.last !== p.first ? `–${p.last}` : ""}</span>`).join("")}
-          ${s.vehicles.map((c) => `<span class="pill"><span class="plate-txt">${esc(c.plate)}</span> ${c.name ? esc(c.name) : "unknown"} · ${c.first}</span>`).join("")}
+        ${known || s.vehicles.length || s.unknown_faces ? `<div class="who-row">
+          ${Object.entries(s.people).map(([n, p]) => `<button class="pill sum-pick${state.person === n ? " on" : ""}" data-sum-person="${esc(n)}" aria-pressed="${state.person === n}">${esc(n)} <b>${p.count}×</b> ${p.first}${p.last !== p.first ? `–${p.last}` : ""}</button>`).join("")}
+          ${s.unknown_faces ? `<button class="pill sum-pick${state.person === "unknown" ? " on" : ""}" data-sum-person="unknown" aria-pressed="${state.person === "unknown"}">Unknown <b>${s.unknown_faces}×</b></button>` : ""}
+          ${s.vehicles.map((c) => `<button class="pill sum-pick${state.plate === c.plate ? " on" : ""}" data-sum-plate="${esc(c.plate)}" aria-pressed="${state.plate === c.plate}"><span class="plate-txt">${esc(c.plate)}</span> ${c.name ? esc(c.name) : "unknown"} · ${c.first}</button>`).join("")}
         </div>` : ""}
         <div class="txt">${esc(s.text)}${s.busiest_hour ? ` Busiest hour: ${s.busiest_hour}.` : ""}</div>`;
     }
@@ -855,6 +890,7 @@
 
     function renderTimeline() {
       const tl = $("timeline");
+      renderSelBar();
       if (!state.items.length) {
         tl.innerHTML = `<div class="empty"><h3>No recordings${state.q ? "" : ` on ${esc(dayLabel(new Date(`${state.day}T12:00`)).toLowerCase())}`}</h3>${state.q ? `Nothing found for “${esc(state.q)}”.` : state.camera || state.label || state.person || state.plate ? "Nothing found with this filter." : state.important ? "Nothing important. Turn off “Important only” to see everything." : "Nothing has been recorded yet."}</div>`;
         $("more").hidden = true;
@@ -870,7 +906,7 @@
         return `<div class="part"><h3>${name}</h3><span class="muted">${hours}</span>${cnt}</div>`;
       };
       const unseen = state.items.filter((e) => e.seen === false).length;
-      let html = state.q ? "" : `<div class="day"><h2>${dayLabel(new Date(`${state.day}T12:00`))}</h2><span class="eyebrow">${state.total} ${state.total === 1 ? "recording" : "recordings"}${unseen ? ` · ${unseen} new` : ""}</span>${unseen ? '<button class="chip seen-all" id="seenAll">All seen</button>' : ""}</div>`;
+      let html = state.q ? "" : `<div class="day"><h2>${dayLabel(new Date(`${state.day}T12:00`))}</h2><span class="eyebrow">${state.total} ${state.total === 1 ? "recording" : "recordings"}${unseen ? ` · ${unseen} new` : ""}</span><span class="day-actions">${unseen && !state.select ? '<button class="chip" id="seenAll">All seen</button>' : ""}<button class="chip" id="selToggle" aria-pressed="${!!state.select}">${state.select ? "Done" : "Select"}</button></span></div>`;
       let last = null;
       state.items.forEach((e, i) => {
         const d = new Date(e.start);
@@ -884,18 +920,58 @@
         const l = LABELS[e.label] || LABELS.motion;
         const snap = e.snapshot ? `style="background-image:url('/clips/${encodeURI(e.snapshot)}')"` : "";
         const names = [knownNames(e), ...(e.plates || []).map((p) => state.plates.known[p.plate] || p.plate)].filter(Boolean).join(", ");
-        html += `<button class="ev${e.false_alarm ? " false-alarm" : ""}${e.seen === false ? " unseen" : ""}" data-i="${i}">
-          <div class="thumb" ${snap}><span class="badge l-${esc(e.label)}">${l.name}</span>${e.false_alarm ? `<span class="badge warn false-alarm">${e.false_alarm === "ai" ? "Probably nothing" : "Nothing"}</span>` : ""}${e.seen === false ? '<span class="badge new">New</span>' : ""}<span class="dur">${fmtDur(e.duration)}</span></div>
-          <div class="body"><span class="time">${fmtTime(e.start)}</span><span class="sub">${names ? `<span class="names">${esc(names)}</span> · ` : ""}${esc(camName(e.camera))}</span></div>
+        const likely = !knownNames(e) && e.likely?.length ? `probably ${e.likely.join(", ")}` : "";
+        html += `<button class="ev${e.false_alarm ? " false-alarm" : ""}${e.seen === false ? " unseen" : ""}${state.select?.has(e.clip) ? " sel" : ""}" data-i="${i}"${state.select ? ` aria-pressed="${state.select.has(e.clip)}"` : ""}>
+          <div class="thumb" ${snap}><span class="badge l-${esc(e.label)}">${l.name}</span>${e.false_alarm ? `<span class="badge warn false-alarm">${e.false_alarm === "ai" ? "Probably nothing" : "Nothing"}</span>` : ""}${e.importance === "high" ? `<span class="badge high" title="Attention: ${esc(e.importance_reason)}">Attention<span class="why">: ${esc(e.importance_reason)}</span></span>` : ""}${e.seen === false ? '<span class="badge new">New</span>' : ""}<span class="dur">${fmtDur(e.duration)}</span></div>
+          <div class="body"><span class="time">${fmtTime(e.start)}</span><span class="sub">${names ? `<span class="names">${esc(names)}</span> · ` : ""}${likely ? `<span class="likely">${esc(likely)}</span> · ` : ""}${esc(camName(e.camera))}</span></div>
         </button>`;
       });
       tl.innerHTML = html + "</div>";
       // only animate in on a new day/filter, not on every refresh
-      const key = [state.day, state.q, state.camera, state.label, state.person, state.plate, state.important].join("|");
+      const key = [state.day, state.q, state.camera, state.label, state.person, state.plate, state.important, state.near].join("|");
       if (tl.dataset.key !== key) tl.querySelectorAll(".ev").forEach((el, n) => { el.classList.add("rise"); el.style.setProperty("--i", Math.min(n, 14)); });
       tl.dataset.key = key;
       attachPreviews();
       $("more").hidden = state.items.length >= state.total;
+    }
+
+    // ---------- several recordings at once ----------
+    function renderSelBar() {
+      const n = state.select?.size || 0;
+      $("selBar").classList.toggle("show", !!state.select);
+      $("selCount").textContent = n;
+      document.querySelectorAll("#selBar [data-sel-act]").forEach((b) => { b.disabled = !n; });
+    }
+    const postJson = (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    async function deleteClips(clips) {
+      const r = await postJson("/api/events/delete", { clips });
+      if (r.status === 401) { location.href = "/login"; return false; }
+      if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Deleting failed"); return false; }
+      return true;
+    }
+    async function selAction(act) {
+      const picked = state.items.filter((e) => state.select?.has(e.clip));
+      if (!picked.length) return;
+      if (act === "seen") markSeen(picked);
+      if (act === "false") {
+        for (const e of picked.filter((e) => !e.false_alarm)) {
+          const r = await postJson("/api/events/false-alarm", { clip: e.clip, false_alarm: true });
+          if (r.ok) e.false_alarm = (await r.json()).false_alarm;
+        }
+      }
+      if (act === "delete") {
+        if (!confirm(`Delete ${picked.length} ${picked.length === 1 ? "recording" : "recordings"} for good? This cannot be undone.`)) return;
+        if (!await deleteClips(picked.map((e) => e.clip))) return;
+      }
+      state.select = null; state.items = [];
+      loadEvents(); loadDays(); loadSummary(); loadStatus();
+    }
+    async function deleteCurrent() {
+      const e = state.items[state.current];
+      if (!e || !confirm("Delete this recording for good? This cannot be undone.")) return;
+      if (!await deleteClips([e.clip])) return;
+      closePlayer(); state.items = [];
+      loadEvents(); loadDays(); loadSummary(); loadStatus();
     }
 
     // ---------- player ----------
@@ -958,6 +1034,7 @@
       el.innerHTML = e.faces.map((f, k) => `
         <div class="face${f.name ? " known" : ""}">
           <img src="/clips/${encodeURI(f.crop)}" alt="">
+          <button class="del" data-face-del="${k}" aria-label="Remove face" title="Wrong face or name: remove">×</button>
           <span class="nm">${f.name ? esc(f.name) : "Unknown"}</span>
           <select data-face="${k}" aria-label="Who is this?">
             <option value="">${f.name ? "Someone else…" : "Who is this?"}</option>
@@ -1039,6 +1116,34 @@
       const r = await fetch(path, { method: "DELETE" });
       if (r.ok) { Object.assign(state.faces, await r.json()); renderPeople(); loadStatus(); }
     }
+
+    document.addEventListener("click", async (ev) => {
+      const btn = ev.target.closest("[data-plate-del]");
+      if (!btn) return;
+      const e = state.items[state.current], plate = btn.dataset.plateDel;
+      if (!e || !confirm(`Remove plate ${plate} from this recording? This day then no longer counts as a visit.`)) return;
+      const r = await fetch("/api/events/remove-plate", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clip: e.clip, plate }),
+      });
+      if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Removing failed"); return; }
+      e.plates = (e.plates || []).filter((p) => p.plate !== plate);
+      renderPlates(e); renderTimeline(); loadStatus();
+    });
+
+    document.addEventListener("click", async (ev) => {
+      const btn = ev.target.closest("[data-face-del]");
+      if (!btn) return;
+      const e = state.items[state.current];
+      const k = Number(btn.dataset.faceDel), f = e?.faces?.[k];
+      if (!f || !confirm(f.name ? `Remove the face of ${f.name} from this recording? Photos of ${f.name} learned from it are forgotten too.` : "Remove this face from this recording?")) return;
+      const r = await fetch("/api/events/remove-face", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ crop: f.crop }),
+      });
+      if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Removing failed"); return; }
+      e.faces.splice(k, 1);
+      try { state.faces = await api("/api/faces"); } catch {}
+      renderFaces(e); renderTimeline(); loadStatus();
+    });
 
     document.addEventListener("change", (ev) => {
       const sel = ev.target.closest("[data-face]");
@@ -1289,6 +1394,7 @@
         const name = state.plates.known[p.plate];
         return `<div class="plate">
           ${p.crop ? `<img src="/clips/${encodeURI(p.crop)}" alt="">` : ""}
+          <button class="del" data-plate-del="${esc(p.plate)}" aria-label="Remove plate ${esc(p.plate)}" title="Misread: remove">×</button>
           <span class="plate-txt">${esc(p.plate)}</span>
           <span class="nm">${name ? esc(name) : p.visitor ? `Regular visitor <span class="muted">· ${p.visitor} days</span>` : "Unknown vehicle"}${p.source === "ai" ? ' <span class="muted">· via AI</span>' : ""}</span>
           ${state.plates.enabled ? `<button class="btn" data-plate-name="${esc(p.plate)}">${name ? "Rename" : "Give a name"}</button>` : ""}
@@ -1350,6 +1456,11 @@
     // ---------- interaction ----------
     document.addEventListener("click", (ev) => {
       if (ev.target.closest("#seenAll")) { markSeen(state.items); renderTimeline(); return; }
+      if (ev.target.closest("#selToggle, #selDone")) { state.select = state.select ? null : new Set(); renderTimeline(); return; }
+      const sa = ev.target.closest("[data-sel-act]");
+      if (sa) { selAction(sa.dataset.selAct); return; }
+      if (ev.target.closest("#nearChip")) { state.near = !state.near; saveFilter(); renderChips(); state.items = []; loadEvents(); return; }
+      if (ev.target.closest("#pDelete")) { deleteCurrent(); return; }
       if (ev.target.closest("#openManage")) { renderManage(); $("manageDlg").showModal(); return; }
       // opening another dialog from Manage: close Manage first
       if ($("manageDlg").open && $("manageDlg").contains(ev.target) && ev.target.closest("[data-settings],[data-mask],#openCompare,#openKeys")) $("manageDlg").close();
@@ -1367,6 +1478,18 @@
       if (sb) { openSettings(sb.dataset.settings); return; }
       const dc = ev.target.closest("[data-dlg-close]");
       if (dc) { $(dc.dataset.dlgClose).close(); return; }
+      const sp = ev.target.closest("[data-sum-person], [data-sum-plate]");
+      if (sp) {
+        // exactly the recordings the day summary counted: this day, all cameras and kinds
+        const person = sp.dataset.sumPerson || null, plate = sp.dataset.sumPlate || null;
+        const same = person ? state.person === person : state.plate === plate;
+        state.person = same ? null : person; state.plate = same ? null : plate;
+        state.camera = null; state.label = null; state.q = null; $("q").value = "";
+        state.important = !state.plate;   // your own car coming or going counts in the summary; switching off = default again
+        saveFilter(); renderChips(); renderCams(); state.items = []; loadEvents(); loadSummary();
+        $("timeline").scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
       const pc = ev.target.closest("[data-person]");
       if (pc) { state.person = pc.dataset.person || null; state.plate = null; saveFilter(); renderChips(); state.items = []; loadEvents(); return; }
       const mb = ev.target.closest("[data-mask]");
@@ -1425,6 +1548,11 @@
         return;
       }
       const item = ev.target.closest(".ev");
+      if (item && state.select) {
+        const clip = state.items[Number(item.dataset.i)]?.clip;
+        if (clip) { state.select.has(clip) ? state.select.delete(clip) : state.select.add(clip); renderTimeline(); }
+        return;
+      }
       if (item) openEvent(Number(item.dataset.i));
     });
     $("more").onclick = () => loadEvents(false);
@@ -1437,6 +1565,10 @@
       if (!$("player").open) return;
       if (ev.key === "ArrowLeft" && !$("pPrev").disabled) step(-1);
       if (ev.key === "ArrowRight" && !$("pNext").disabled) step(1);
+      if (ev.target.closest?.("input, textarea, select") || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+      if (ev.key === "n" || ev.key === "N") $("pFalse").click();
+      if (ev.key === "Delete") deleteCurrent();
+      if (ev.key === " " && ev.target.tagName !== "BUTTON" && ev.target.tagName !== "VIDEO") { ev.preventDefault(); const v = $("pVideo"); v.paused ? v.play() : v.pause(); }
     });
 
     // ---------- manage ----------

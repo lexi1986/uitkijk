@@ -42,7 +42,7 @@ One device per camera (e.g. "Front door") with:
 | `binary_sensor.cam_<camera>_loitering` | unrecognised person in view for a while |
 | `binary_sensor.cam_<camera>_online` | both streams connected |
 | `camera.cam_<camera>_snapshot` | last detection with box |
-| `event.cam_<camera>_event` | one event per saved clip, plus `unknown_vehicle` and `unknown_face` alerts |
+| `event.cam_<camera>_event` | one event per saved clip, plus `unknown_vehicle`, `unknown_face` and `unknown_person` alerts |
 | `sensor.cam_<camera>_last_event` | start of the last event; attribute `events` with the last 20 |
 | `sensor.cam_<camera>_face` / `_plate` / `_description` | recognised name, plate, AI description (when enabled) |
 | `switch.cam_<camera>_detect` / `_record` | detection / recording on or off |
@@ -73,6 +73,9 @@ to the server itself (127.0.0.1).
 | `GET /api/events?camera=&label=&person=&plate=&q=&day=&important=` | stored events, newest first |
 | `GET /api/summary?day=YYYY-MM-DD` | daily summary |
 | `POST /api/events/false-alarm` | `{"clip": "...", "false_alarm": true}` |
+| `POST /api/events/delete` | `{"clips": ["...mp4", ...]}`: delete recordings for good |
+| `POST /api/events/remove-face` | `{"crop": "...face1.jpg"}`: remove a wrong face from an event |
+| `POST /api/events/remove-plate` | `{"clip": "...mp4", "plate": "AB-123-C"}`: remove a misread plate |
 | `GET /api/ai-comparison?days=7` | external AI next to local AI |
 | `GET /api/cameras/<camera>/latest.jpg` | last snapshot |
 | `GET /api/cameras/<camera>/mask.jpg` | current frame with mask, zones and percentage grid |
@@ -164,7 +167,18 @@ The log should show `main stream connected`, `sub stream connected` and
   recordings are grouped into evening, afternoon, morning and night, with the daily summary on top.
   Searching (names, plates, AI description) covers all days. **Important only** (on by default) hides
   "probably nothing" and your own car coming or going.
-- **Player** with faces, plates, the AI description and **Nothing to worry about** (see below).
+  **Nearby** hides recordings where the object fills less than a quarter of the frame height
+  (passers-by on the street). Names and plates in the daily summary are buttons: they show exactly
+  the recordings that were counted. A name guessed from clothing or arrival shows in italics as
+  "probably Alex".
+- **Attention** badge: each recording gets `importance` (`low`, `normal`, `high`) from fixed rules.
+  High is an unknown person loitering, or an unknown person or unknown plate between 22:00 and 07:00.
+- **Player** with faces, plates, the AI description and **Nothing to worry about** (see below). The ×
+  on a face or plate removes a wrong one from the recording (a face photo learned from it is
+  forgotten too; a misread plate no longer counts as a visit). **Delete** removes the whole
+  recording. Keys: ← → previous/next, `N` nothing to worry about, `Delete`, space to play/pause.
+- **Select** (next to the day): pick several recordings and mark them seen or "nothing to worry
+  about", or delete them, in one go.
 - **Manage**: storage, server health, settings and mask/zones per camera, AI comparison, passkeys.
   Settings apply immediately and are stored in `settings.json`, masks in `masks.json`, zones in
   `zones.json` (all in the state folder; they take precedence over the config).
@@ -182,7 +196,15 @@ get the zone name. By hand in the config: `mask: - [[0, 0], [100, 0], [100, 20],
   `POST /api/cameras/<camera>/trigger`. A recording with label *doorbell* starts immediately and the
   service searches the whole sharp image for a face (3× one second apart).
 - **Loitering**: an unrecognised person in view longer than `objects.loiter_seconds` (default 30 s)
-  turns on `binary_sensor.cam_<camera>_loitering`. Works best with `objects.always: true`.
+  turns on `binary_sensor.cam_<camera>_loitering`. Works best with `objects.always: true`. Just
+  before that, the service takes one more look at the sharp image for a known face and compares the
+  clothing with today's; if that finds a resident, loitering stays off.
+- **Unknown person**: after a clip has been searched again and the AI is done (about 1–2 minutes
+  after it ends), `event_type: unknown_person` is sent when there is no name, no likely name and no
+  false alarm. Use it in an automation for the cameras you care about.
+- **Confirmation**: a person or vehicle only counts once the same tracked object has been seen often
+  enough (for people in daylight also with a median score of 0.6 or more); impossible shapes and
+  tiny boxes are dropped.
 - **Stationary vehicles and animals** are saved every 30 s in `stationary_<camera>.json`, so a
   restart does not create new events. While idle, parked cars are re-checked every 5 minutes.
 
@@ -336,6 +358,9 @@ archive is not used (so clips never pile up on the local disk by accident).
   is a few tens of milliseconds per frame, and only on motion. OpenVINO (`yolo11n.xml`,
   `FORMAT=openvino bash deploy/export-model.sh`) can use an Intel iGPU; the service tests it in a
   separate process first and only uses it when that test passes.
+- **Two models on an iGPU**: `model.path` looks at the whole frame (for example `yolo11s_640.xml`, sharp
+  at a distance) and `model.zoom_path` at the crop around motion (for example `yolo11s.xml` at
+  320 px, most frames). On the author's clips that combination found the most for the least compute.
 - **On an iGPU, go bigger**: with OpenVINO on an Intel UHD 630 a YOLO model at 640 px takes about
   25 ms per frame and finds people further away than 320 px, as long as the sub stream is at least
   640 px wide. Export at that size (`FORMAT=openvino MODEL=yolo26n SIZE=640`) and set
@@ -385,6 +410,9 @@ entities get new English IDs (e.g. `binary_sensor.cam_<camera>_person`); update 
 dashboards that use the old ones, and remove the old, unavailable entities.
 
 ## Development and tests
+
+The camera code lives in four files: `camera.py` (streams, detection, events), `camera_faces.py`
+(faces, clothing), `camera_plates.py` (plates) and `camera_base.py` (shared constants).
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt

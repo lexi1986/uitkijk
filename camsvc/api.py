@@ -11,6 +11,7 @@ import logging
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime
 
 from fastapi import Body, FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -189,7 +190,7 @@ def create_app(svc: "Service") -> FastAPI:
     def all_events(camera: str | None = None, label: str | None = None,
                    offset: int = 0, limit: int = 60, person: str | None = None,
                    plate: str | None = None, q: str | None = None, day: str | None = None,
-                   important: bool = False):
+                   important: bool = False, near: bool = False):
         """All stored events (newest first), filterable by camera, label, person, plate and free
         text `q` (names, plates, AI description; all words must match)."""
         if camera:
@@ -204,7 +205,7 @@ def create_app(svc: "Service") -> FastAPI:
         items, total = svc.store.browse(camera, label, max(offset, 0), min(max(limit, 1), 200),
                                         person or None, plate or None, (q or "").strip()[:100] or None,
                                         svc.plates.known if svc.plates else {}, day or None,
-                                        important)
+                                        important, near)
         return {"total": total, "offset": offset, "items": items}
 
     @app.get("/api/days")
@@ -232,6 +233,24 @@ def create_app(svc: "Service") -> FastAPI:
             if js and svc.store.update(js, {"seen": True}) is not None:
                 done += 1
         return {"seen": done}
+
+    @app.post("/api/events/delete")
+    def events_delete(payload: dict = Body(...)):
+        """Delete recordings for good: {"clips": ["<camera>/<date>/<time>_<label>.mp4", ...]}."""
+        done = 0
+        for clip in list(payload.get("clips") or [])[:200]:
+            gone = svc.store.delete_event(str(clip))
+            if not gone:
+                continue
+            done += 1
+            if svc.faces is not None:
+                for rel in gone:
+                    if ".face" in rel:
+                        svc.faces.unknown.drop_crop(rel)
+            log.info("Recording %s deleted from the web page", clip)
+        if not done:
+            raise HTTPException(404, "Event not found")
+        return {"deleted": done}
 
     @app.post("/api/events/false-alarm")
     def event_false(payload: dict = Body(...)):
@@ -343,6 +362,45 @@ def create_app(svc: "Service") -> FastAPI:
         svc.store.set_face_name(crop, name)
         faces.unknown.drop_crop(crop)
         return {"name": name, "sample": sample_id, **faces_payload(faces)}
+
+    @app.post("/api/events/remove-face")
+    def event_face_remove(payload: dict = Body(...)):
+        """Remove a wrong face or wrong name from an event: {"crop": "<...>.face1.jpg"}.
+        If it had a name, photos learned from it or assigned from it are forgotten too."""
+        crop = str(payload.get("crop", ""))
+        if ".face" not in crop or not crop.endswith(".jpg"):
+            raise HTTPException(400, "Not a face crop")
+        target = clip_file(crop)
+        jpg = target.read_bytes()
+        found, name = svc.store.remove_face(crop)
+        if not found:
+            raise HTTPException(404, "Face not found in this event")
+        forgotten = 0
+        if svc.faces is not None:
+            svc.faces.unknown.drop_crop(crop)
+            if name:
+                forgotten = svc.faces.forget_like(name, jpg)
+        target.unlink(missing_ok=True)
+        log.info("Face %s removed from its event (%s, %d photos forgotten)", crop, name or "unknown", forgotten)
+        return {"forgotten": forgotten}
+
+    @app.post("/api/events/remove-plate")
+    def event_plate_remove(payload: dict = Body(...)):
+        """Remove a misread plate from an event: {"clip": "<...>.mp4", "plate": "AB-123-C"}.
+        That day no longer counts as a visit; a name given to the plate stays."""
+        clip, plate = str(payload.get("clip", "")), str(payload.get("plate", ""))
+        clip_file(clip)
+        data, gone = svc.store.remove_plate(clip, plate)
+        if not gone:
+            raise HTTPException(404, "Plate not found in this event")
+        if svc.plates is not None:
+            svc.plates.forget_visit(plate, datetime.fromisoformat(data["start"]).date())
+        for p in gone:
+            target = svc.store.find(p["crop"]) if p.get("crop") else None
+            if target is not None:
+                target.unlink(missing_ok=True)
+        log.info("Plate %s removed from %s", plate, clip)
+        return {"ok": True}
 
     @app.delete("/api/faces/{name}/auto/{sample_id}")
     def face_forget_auto(name: str, sample_id: str):

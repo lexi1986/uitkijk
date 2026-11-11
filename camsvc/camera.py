@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
+from collections import deque
+from datetime import datetime
 import json
-import logging
+from pathlib import Path
 import queue
 import shutil
 import threading
 import time
+from typing import Callable
 import uuid
-from collections import deque
-from dataclasses import dataclass, field, replace
-from datetime import datetime
-from pathlib import Path
-from typing import TYPE_CHECKING, Callable
 
 import av
 import cv2
@@ -22,147 +20,25 @@ import numpy as np
 from .config import CameraConfig
 from .detector import Detection, ObjectDetector, draw_detections
 from .events import EventRecord, EventStore, clip_paths
-from .faces import FaceGroup, FaceMatch, FaceRecognizer, summarize
+from .faces import FaceRecognizer, summarize
 from .motion import MotionDetector, build_mask, motion_region, point_masked, zones_at
-from .plates import VISITOR_DAYS, PlateRead, PlateReader, plates_in_text, vote
+from .plates import VISITOR_DAYS, PlateRead, PlateReader, plates_in_text
 from .recorder import RTSP_OPTIONS, MainRecorder
-from .tracker import ObjectTrack, Tracker
-
-if TYPE_CHECKING:
-    from .ai_describe import AiDescriber
-    from .mqtt import MqttBridge
-
-log = logging.getLogger(__name__)
-
-LABEL_PRIORITY = {"doorbell": 4, "person": 3, "vehicle": 2, "animal": 1, "motion": 0}
-# Labels that can stand still without being interesting (parked car, sleeping cat).
-STATIONARY_LABELS = {"vehicle", "animal"}
-STATIONARY_IOU = 0.7      # this much overlap with the previous spot = not moved
-# Only forget an object after not seeing it at all for this long. Do not count how often the
-# model misses it: at night the confidence hovers around the threshold and a parked car would
-# keep becoming 'new'. A car that leaves or arrives moves and counts normally.
-STATIONARY_FORGET = 3600.0
-FULL_FRAME_EVERY = 10.0   # look at the whole frame at least this often, even when zooming is possible
-STATIONARY_MAX_TRACKS = 30
-STATIONARY_SAVE_EVERY = 30.0   # seconds between saving stationary objects
-# Part of a stationary object only counts as that object when it was seen recently; a car that
-# left and comes back later triggers an event again.
-STATIONARY_PART_RECENT = 900.0
-STATIONARY_REFRESH = 300.0    # this often, when idle, check whether stationary objects are still there
-# Crop for the AI description: this many times the box, at least this share of the frame height.
-AI_CROP_MARGIN = 2.0
-AI_CROP_MIN = 0.45
-# "False alarm" from the web page: the same kind of object in almost the same spot no longer counts.
-FALSE_SPOT_IOU = 0.6
-FALSE_SPOTS_MAX = 50
-# Doubtful detections (score below objects.verify_below) are first verified on a sharp, zoomed
-# crop from the main stream. A drainpipe or garden bag scores 0 there, a real person 0.8+.
-VERIFY_LABELS = {"person", "animal"}
-PLATE_PARKED_AFTER = 900.0    # unknown vehicle that stays this long: alert
-NIGHT_HOURS = (22, 7)         # unknown vehicle between these hours: alert immediately
-RING_FACE_ATTEMPTS = 3        # on a doorbell ring, search the whole frame for a face this often (1 s apart)
-ASK_FACE_AT = (1, 3)          # ask who it is the first time and again when an unknown face returns
-RESCAN_STEP = 0.5             # saved clip: look for faces every half second ...
-RESCAN_MAX_SECONDS = 120      # ... in at most the first two minutes
-RESCAN_MIN_FRAMES = 2         # a newly found face must appear in this many frames
-RESCAN_BODY_STEP = 1.0        # clothing: look for the largest person every second
-_RESCAN_SLOT = threading.Semaphore(1)   # one clip at a time, across all cameras
-_RESCAN_WAITING = threading.Semaphore(4)   # at most this many clips waiting; skip the rest
-BODY_ATTEMPTS = 3             # this many sharp crops of the person per event
-BODY_INTERVAL = 2.0
-ARRIVAL_WINDOW = 300.0        # this long after arriving home (per HA) an unknown person is probably that resident
-VERIFY_MIN = 0.5          # the sharp crop must score at least this
-# At night (infrared, black and white) a real person scores much lower, also on the sharp frame:
-# someone stepping out of a car stayed around 0.3-0.45 and the check gave 0.32
-NIGHT_PERSON_MIN = 0.4    # check people from this score up (instead of min_score)
-VERIFY_MIN_NIGHT = 0.25
-VERIFY_KEEP_OK = 30.0     # confirmed: do not verify again for this long (while it stays nearby)
-VERIFY_KEEP_BAD = 300.0   # ignore a rejected spot for this long
+from .tracker import Tracker, plausible_shape
+from .camera_base import (  # noqa: F401 - also for whoever imports them from camsvc.camera
+    AI_CROP_MARGIN, AI_CROP_MIN, ALWAYS_IDLE_FPS, ARRIVAL_WINDOW, ASK_FACE_AT, ActiveEvent, BODY_ATTEMPTS,
+    BODY_INTERVAL, BODY_MIN_FRAC, FALSE_SPOTS_MAX, FALSE_SPOT_IOU, FULL_FRAME_EVERY, LABEL_PRIORITY,
+    NIGHT_PERSON_MIN, PLATE_PARKED_AFTER, RESCAN_BODY_STEP, RESCAN_MAX_SECONDS, RESCAN_MIN_FRAMES,
+    RESCAN_STEP, RING_FACE_ATTEMPTS, STATIONARY_FORGET, STATIONARY_IOU, STATIONARY_LABELS,
+    STATIONARY_MAX_TRACKS, STATIONARY_PART_RECENT, STATIONARY_REFRESH, STATIONARY_SAVE_EVERY, TRACKED_LABELS,
+    TRACK_MIN_MEDIAN, Track, UNKNOWN_PERSON_DELAY, VERIFY_KEEP_BAD, VERIFY_KEEP_OK, VERIFY_LABELS,
+    VERIFY_MIN, VERIFY_MIN_NIGHT, Verdict, _RESCAN_SLOT, _RESCAN_WAITING, contained, iou, zoom_score, log,
+)
+from .camera_faces import FacesMixin
+from .camera_plates import PlatesMixin
 
 
-def iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
-    ix = max(0, min(a[2], b[2]) - max(a[0], b[0]))
-    iy = max(0, min(a[3], b[3]) - max(a[1], b[1]))
-    inter = ix * iy
-    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
-    return inter / union if union > 0 else 0.0
-
-
-def contained(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
-    """Which share of box a lies inside box b (0-1)."""
-    ix = max(0, min(a[2], b[2]) - max(a[0], b[0]))
-    iy = max(0, min(a[3], b[3]) - max(a[1], b[1]))
-    area = (a[2] - a[0]) * (a[3] - a[1])
-    return ix * iy / area if area > 0 else 0.0
-
-
-@dataclass
-class Verdict:
-    """Outcome of verifying a doubtful detection at a spot in the frame."""
-    label: str
-    box: tuple[int, int, int, int]
-    until: float
-    ok: bool
-
-
-def zoom_score(main: np.ndarray, box: tuple[int, int, int, int], sub_shape: tuple[int, int],
-               detector: ObjectDetector, label: str) -> float:
-    """Highest score for `label` in a square crop of the main image around a box from the sub
-    stream (at least 320 px, so the model does not have to upscale)."""
-    sy, sx = main.shape[0] / sub_shape[0], main.shape[1] / sub_shape[1]
-    x1, y1, x2, y2 = box
-    cx, cy = (x1 + x2) / 2 * sx, (y1 + y2) / 2 * sy
-    side = max(320.0, 1.6 * max((x2 - x1) * sx, (y2 - y1) * sy))
-    a, b = int(max(0, cx - side / 2)), int(max(0, cy - side / 2))
-    crop = main[b:int(b + side), a:int(a + side)]
-    if crop.size == 0:
-        return 0.0
-    return max((d.score for d in detector.detect(crop, [label], 0.25)), default=0.0)
-
-
-@dataclass
-class Track:
-    """An object that stays in (almost) the same spot."""
-    label: str
-    box: tuple[int, int, int, int]
-    first_seen: float
-    last_seen: float = 0.0
-
-
-@dataclass
-class ActiveEvent:
-    id: str
-    start_wall: datetime
-    start_mono: float
-    last_trigger: float
-    label: str
-    labels: set[str] = field(default_factory=set)
-    best_score: float | None = None
-    snapshot_jpg: bytes | None = None
-    faces: list[FaceMatch] = field(default_factory=list)
-    face_attempts: int = 0
-    last_face_try: float = 0.0
-    plates: list[PlateRead] = field(default_factory=list)
-    ai_requested: bool = False
-    zones: set[str] = field(default_factory=set)
-    ai: dict | None = None
-    plate_attempts: int = 0
-    vehicle_box: tuple[int, int, int, int] | None = None   # last position of the vehicle
-    body_emb: np.ndarray | None = None    # clothing/build of the largest person (re-identification)
-    body_area: int = 0
-    body_attempts: int = 0
-    face_crops: dict[int, str] = field(default_factory=dict)   # id(face frame) -> saved crop
-    objects: dict[int, ObjectTrack] = field(default_factory=dict)   # tracked people/vehicles
-    last_body_try: float = 0.0
-    max_persons: int = 0
-    last_plate_try: float = 0.0
-    best_box: list[float] | None = None   # best detection as a fraction of the frame
-    ai_labels: set[str] = field(default_factory=set)   # labels at the time the AI description was requested
-    false_alarm: str | None = None
-    external: dict | None = None
-
-
-class Camera:
+class Camera(FacesMixin, PlatesMixin):
     def __init__(self, cfg: CameraConfig, clips_dir: Path, state_dir: Path,
                  detector: ObjectDetector | None, store: EventStore,
                  mqtt: "MqttBridge | None", switches: dict[str, bool],
@@ -172,6 +48,7 @@ class Camera:
         self.name = cfg.name
         self.clips_dir = clips_dir
         self.detector = detector
+        self.zoom_detector = None   # lighter model for crops; set by the service
         self.store = store
         self.mqtt = mqtt
         self.detect_enabled = switches.get("detect", True)
@@ -215,6 +92,8 @@ class Camera:
         self._tracks_saved = 0.0
         self._person_since: float | None = None
         self.loitering = False
+        self._loiter_busy = False
+        self._loiter_cleared: str | None = None   # event in which the check found a resident
         self._last_infer = 0.0
         self._last_full_infer = 0.0
         self._last_refresh = 0.0
@@ -258,8 +137,8 @@ class Camera:
         max_fps = self.cfg.objects["max_fps"]
         self.max_infer_fps = (5.0 if accelerated else 2.0) if str(max_fps) == "auto" else float(max_fps)
         self.always_detect = bool(self.cfg.objects["always"])
-        # without motion, look calmly: once per second on the CPU, people only
-        self.idle_infer_fps = self.max_infer_fps if accelerated else 1.0
+        # without motion, look calmly and for people only: the whole frame with the heavy model
+        self.idle_infer_fps = min(self.max_infer_fps, ALWAYS_IDLE_FPS) if accelerated else 1.0
 
     # ------------------------------------------------------------------ start/stop
     def start(self) -> None:
@@ -546,7 +425,7 @@ class Camera:
         else:
             x0, y0, x1, y1 = region
             detections = [Detection(d.label, d.score, (d.box[0] + x0, d.box[1] + y0, d.box[2] + x0, d.box[3] + y0))
-                          for d in self.detector.detect(bgr[y0:y1, x0:x1], labels, min_score)]
+                          for d in (self.zoom_detector or self.detector).detect(bgr[y0:y1, x0:x1], labels, min_score)]
             self.stats["zoom"] = self.stats.get("zoom", 0) + 1
         # the lower night threshold is for people only; they go through _verify as doubtful cases
         detections = [d for d in detections
@@ -574,24 +453,34 @@ class Camera:
             detections = zoned
         if self.false_spots:
             detections = [d for d in detections if not self._at_false_spot(d, bgr.shape[:2])]
+        detections = [d for d in detections if d.label not in TRACKED_LABELS
+                      or plausible_shape(d.label, d.box, bgr.shape[1], bgr.shape[0])]
         detections = self._verify(now, detections, bgr.shape[:2])
         with self._lock:
             detections = self._drop_stationary(now, detections, labels)
-            followed = [d for d in detections if d.label in ("person", "vehicle")]
+            followed = [d for d in detections if d.label in TRACKED_LABELS]
             tracked = self.tracker.update(now, followed)
             # a vehicle only starts something when it really drives: a parked car the stationary
             # logic briefly lost (at night, after a restart) is just standing still
             parked = {id(d) for d, o in zip(followed, tracked)
                       if d.label == "vehicle" and o.direction(*self._frame_size) == "stays put"}
             detections = [d for d in detections if id(d) not in parked]
+            for d, o in zip(followed, tracked):
+                if id(d) not in parked:
+                    o.hits = [*o.hits[-7:], (now, d.score)]
             window = float(cfg.objects["hit_window_seconds"])
             for d in detections:
                 self._hits[d.label].append(now)
             for lbl, hits in self._hits.items():
                 while hits and hits[0] < now - window:
                     hits.popleft()
+            need = int(cfg.objects["min_hits"]) + (1 if self.weather["bad"] else 0)
+            # at night a real person scores low; there the check on the sharp image decides
+            median = {"person": 0.0 if self.night else TRACK_MIN_MEDIAN, "vehicle": 0.0}
             confirmed = [lbl for lbl, hits in self._hits.items()
-                         if len(hits) >= int(cfg.objects["min_hits"]) + (1 if self.weather["bad"] else 0)]
+                         if (any(o.label == lbl and o.confirmed(now, window, need, median[lbl])
+                                 for o in self.tracker.active)
+                             if lbl in TRACKED_LABELS else len(hits) >= need)]
             # zone occupancy: confirmed objects, plus what dropped out as stationary (parked car)
             moving_ids = {id(d) for d in detections}
             for names, d in in_zone:
@@ -622,41 +511,6 @@ class Camera:
                     self._maybe_plates(now, bgr.shape[:2], cars)
             if self.event is not None:
                 self.event.objects.update({o.id: o for o in tracked})
-
-    def _publish_seen(self, start: str, clip: str, faces: list[dict], likely: list[str] | None) -> None:
-        """'Last seen' per person to HA: sure by face, or likely."""
-        if not self.mqtt:
-            return
-        sure = {f["name"] for f in faces or [] if f.get("name")}
-        for name in sure | set(likely or []):
-            self.mqtt.publish_seen(name, {"time": start, "camera": self.cfg.friendly_name,
-                                          "clip_url": f"{self.store.public_url}/clips/{clip}",
-                                          "sure": name in sure})
-
-    def _check_cars(self, now: float) -> None:
-        """Known cars home or away, from their learned parking spot (lock already held)."""
-        limit = float(self.cfg.objects["stationary_seconds"])
-        parked = [t for t in self._tracks if t.label == "vehicle" and now - t.first_seen >= limit
-                  and now - t.last_seen < STATIONARY_REFRESH + 60]
-        for plate, (box, seen) in list(self._spot_pending.items()):
-            spot = max(parked, key=lambda t: iou(t.box, box), default=None)
-            if spot is not None and iou(spot.box, box) >= 0.3:
-                self._spots[plate] = list(spot.box)
-                del self._spot_pending[plate]
-                try:
-                    self._spots_file.write_text(json.dumps(self._spots))
-                except OSError as exc:
-                    log.warning("[%s] saving the parking spot failed: %s", self.name, exc)
-                log.info("[%s] learned the parking spot of %s", self.name, plate)
-            elif now - seen > 900:
-                del self._spot_pending[plate]
-        for plate, box in self._spots.items():
-            home = any(iou(t.box, tuple(box)) >= 0.5 for t in parked)
-            if self.car_home.get(plate) != home:
-                self.car_home[plate] = home
-                if self.mqtt and self.plates:
-                    self.mqtt.publish_car(self.name, plate, self.plates.name_of(plate) or plate, home,
-                                          datetime.now().astimezone().isoformat(timespec="seconds"))
 
     def _publish_counts(self, now: float, cooldown: float) -> None:
         """Number of people and vehicles in view now; parked cars count too (lock already held)."""
@@ -788,7 +642,7 @@ class Camera:
             for d in todo:
                 # no sharp image available: do not be stricter than without verification
                 score = 1.0 if frame is None else zoom_score(frame, d.box, sub_shape,
-                                                             self.detector, d.label)
+                                                             self.zoom_detector or self.detector, d.label)
                 ok = score >= (VERIFY_MIN_NIGHT if night else VERIFY_MIN)
                 found.append(Verdict(d.label, d.box, now + (VERIFY_KEEP_OK if ok else VERIFY_KEEP_BAD), ok))
                 if not ok:
@@ -803,173 +657,15 @@ class Camera:
             self._verify_busy = False
 
     # ------------------------------------------------------------------ faces
-    def _maybe_faces(self, now: float, sub_shape: tuple[int, int],
-                     boxes: list[tuple[int, int, int, int]]) -> None:
-        """Start face recognition in the background (lock already held)."""
-        ev = self.event
-        fcfg = self.cfg.settings["faces"]
-        if (self.faces is None or ev is None or not boxes or self._face_busy
-                or ev.face_attempts >= int(fcfg["attempts"])
-                or now - ev.last_face_try < float(fcfg["interval_seconds"])
-                or len({f.name for f in ev.faces if f.name and f.score >= self.faces.backend.learn})
-                >= len(boxes)):
-            return                  # only stop once someone is recognised with confidence
-        ev.face_attempts += 1
-        ev.last_face_try = now
-        self._face_busy = True
-        threading.Thread(target=self._face_job, args=(ev.id, sub_shape, boxes),
-                         name=f"faces-{self.name}", daemon=True).start()
-
-    def _face_job(self, event_id: str, sub_shape: tuple[int, int],
-                  boxes: list[tuple[int, int, int, int]]) -> None:
-        try:
-            frame = None
-            if self.cfg.settings["faces"]["source"] == "main":
-                frame = self.recorder.grab_frame()
-            if frame is None and self.latest_bgr is not None:
-                frame = self.latest_bgr.copy()
-            if frame is None:
-                return
-            sy, sx = frame.shape[0] / sub_shape[0], frame.shape[1] / sub_shape[1]
-            matches: list[FaceMatch] = []
-            if not boxes:                       # no known person position (doorbell): whole frame
-                matches = self.faces.analyse(frame)
-            for x1, y1, x2, y2 in boxes:
-                # upper part of the person, slightly wider: that is where the head is
-                bw, bh = x2 - x1, y2 - y1
-                cx1 = int(max(0, (x1 - 0.2 * bw) * sx))
-                cx2 = int(min(frame.shape[1], (x2 + 0.2 * bw) * sx))
-                cy1 = int(max(0, (y1 - 0.1 * bh) * sy))
-                cy2 = int(min(frame.shape[0], (y1 + 0.6 * bh) * sy))
-                if cx2 - cx1 < 40 or cy2 - cy1 < 40:
-                    continue
-                matches += self.faces.analyse(frame[cy1:cy2, cx1:cx2])
-            if not matches and boxes:
-                # nothing in the crop (head at the edge of the box, filmed from above):
-                # search the whole sharp frame instead
-                matches = self.faces.analyse(frame)
-            if not matches:
-                return
-            with self._lock:
-                ev = self.event if self.event and self.event.id == event_id else None
-                if ev is not None:
-                    # keep all attempts together (best images first); the choice is made per person
-                    ev.faces = sorted(ev.faces + matches, key=lambda m: -m.quality)[:16]
-                    matches = ev.faces
-            groups = summarize(matches, self.faces.backend.group)
-            known = next((g for g in groups if g.name), None)
-            name = known.name if known else "unknown"
-            log.info("[%s] face: %s%s", self.name, name,
-                     f" ({known.score:.2f}, {len(known.members)} image(s))" if known else "")
-            self._set_face(name)
-        except Exception:  # noqa: BLE001 - recognition must never disturb the camera
-            log.exception("[%s] face recognition failed", self.name)
-        finally:
-            self._face_busy = False
 
     # ------------------------------------------------------------------ clothing and build
-    def _maybe_body(self, now: float, sub_shape: tuple[int, int],
-                    boxes: list[tuple[int, int, int, int]]) -> None:
-        """(lock already held) Extract the features of the largest person from the sharp image."""
-        ev = self.event
-        if (self.bodies is None or ev is None or not boxes or self._body_busy
-                or ev.body_attempts >= BODY_ATTEMPTS or now - ev.last_body_try < BODY_INTERVAL):
-            return
-        ev.body_attempts += 1
-        ev.last_body_try = now
-        self._body_busy = True
-        box = max(boxes, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
-        threading.Thread(target=self._body_job, args=(ev.id, sub_shape, box),
-                         name=f"body-{self.name}", daemon=True).start()
-
-    def _body_job(self, event_id: str, sub_shape: tuple[int, int], box: tuple[int, int, int, int]) -> None:
-        try:
-            frame = self.recorder.grab_frame()
-            if frame is None:
-                return
-            sy, sx = frame.shape[0] / sub_shape[0], frame.shape[1] / sub_shape[1]
-            x1, y1, x2, y2 = int(box[0] * sx), int(box[1] * sy), int(box[2] * sx), int(box[3] * sy)
-            emb = self.bodies.embed(frame[y1:y2, x1:x2])
-            if emb is None:
-                return
-            area = (x2 - x1) * (y2 - y1)
-            with self._lock:
-                ev = self.event if self.event and self.event.id == event_id else None
-                if ev is not None and area > ev.body_area:       # the largest (closest) image counts
-                    ev.body_emb, ev.body_area = emb, area
-        except Exception:  # noqa: BLE001 - must never disturb the camera
-            log.exception("[%s] determining clothing/build failed", self.name)
-        finally:
-            self._body_busy = False
 
     # ------------------------------------------------------------------ licence plates
-    def _maybe_plates(self, now: float, sub_shape: tuple[int, int],
-                      boxes: list[tuple[int, int, int, int]]) -> None:
-        """Start a plate reading in the background (lock already held)."""
-        ev = self.event
-        pcfg = self.cfg.settings["plates"]
-        # a known car already standing on its own spot does not need reading
-        parked = [tuple(b) for p, b in self._spots.items() if self.car_home.get(p)]
-        boxes = [b for b in boxes if not any(iou(b, s) >= 0.5 for s in parked)]
-        if (self.plates is None or ev is None or not boxes or self._plate_busy
-                or ev.plate_attempts >= int(pcfg["attempts"])
-                or now - ev.last_plate_try < float(pcfg["interval_seconds"])):
-            return
-        # the same plate read twice: certain enough
-        best = vote(ev.plates)
-        if best and sum(r.plate == best.plate for r in ev.plates) >= 2:
-            return
-        ev.plate_attempts += 1
-        ev.last_plate_try = now
-        self._plate_busy = True
-        threading.Thread(target=self._plate_job, args=(ev.id, sub_shape, boxes),
-                         name=f"plates-{self.name}", daemon=True).start()
-
-    def _plate_job(self, event_id: str, sub_shape: tuple[int, int],
-                   boxes: list[tuple[int, int, int, int]]) -> None:
-        try:
-            frame = self.recorder.grab_frame()
-            if frame is None:
-                return
-            sy, sx = frame.shape[0] / sub_shape[0], frame.shape[1] / sub_shape[1]
-            reads: list[PlateRead] = []
-            for x1, y1, x2, y2 in boxes:
-                bw, bh = x2 - x1, y2 - y1
-                cx1 = int(max(0, (x1 - 0.1 * bw) * sx))
-                cx2 = int(min(frame.shape[1], (x2 + 0.1 * bw) * sx))
-                cy1 = int(max(0, (y1 - 0.1 * bh) * sy))
-                cy2 = int(min(frame.shape[0], (y2 + 0.1 * bh) * sy))
-                if cx2 - cx1 >= 60 and cy2 - cy1 >= 40:
-                    reads += self.plates.read(frame[cy1:cy2, cx1:cx2])
-            for r in reads:   # fix a misread of a known plate, so the votes add up
-                r.plate = self.plates.known_plate(r.plate) or r.plate
-            if not reads:
-                return
-            with self._lock:
-                ev = self.event if self.event and self.event.id == event_id else None
-                if ev is None:
-                    return
-                ev.plates = (ev.plates + reads)[-12:]
-                best = vote(ev.plates)
-            name = self.plates.name_of(best.plate)
-            log.info("[%s] plate: %s%s (%.2f)", self.name, best.plate,
-                     f" = {name}" if name else "", best.confidence)
-            self._set_plate(best.plate, name)
-        except Exception:  # noqa: BLE001 - recognition must never disturb the camera
-            log.exception("[%s] plate recognition failed", self.name)
-        finally:
-            self._plate_busy = False
 
     def _set_plate(self, plate: str, name: str | None) -> None:
         self.plate = plate
         if self.mqtt and self.plates is not None:
             self.mqtt.publish_plate(self.name, plate, name)
-
-    def _set_face(self, name: str) -> None:
-        if name != self.face_name or name != "none":
-            self.face_name = name
-            if self.mqtt and self.faces is not None:
-                self.mqtt.publish_face(self.name, name)
 
     # ------------------------------------------------------------------ persisting stationary objects
     def _save_tracks(self, now: float) -> None:
@@ -1236,15 +932,16 @@ class Camera:
             self._publish_counts(now, cooldown)
             self._check_cars(now)
             loiter = float(self.cfg.objects["loiter_seconds"])
-            if (loiter > 0 and not self.loitering and self.object_active["person"]
+            if (loiter > 0 and not self.loitering and not self._loiter_busy and self.object_active["person"]
                     and self.tracker.longest("person", now) >= loiter   # one and the same person
                     and self.face_name in ("none", "unknown")
                     and not (self.event is not None and self.event.false_alarm)
+                    and not (self.event is not None and self.event.id == self._loiter_cleared)
                     and not self._recent_arrivals(now)):
-                self.loitering = True
-                log.info("[%s] person loitering (%.0f s in view)", self.name,
-                         self.tracker.longest("person", now))
-                self._publish_binary("loitering", True)
+                # take one more good look first: someone with their back to the camera is often a resident
+                self._loiter_busy = True
+                threading.Thread(target=self._loiter_check, args=(self.event,),
+                                 name=f"loiter-{self.name}", daemon=True).start()
             if now - self._tracks_saved >= STATIONARY_SAVE_EVERY:
                 self._save_tracks(now)
             if self._plate_watch:
@@ -1334,6 +1031,7 @@ class Camera:
             zones=sorted(ev.zones) or None,
             likely=self._likely_residents(ev, faces),
             box=ev.best_box, false_alarm=ev.false_alarm, external=ev.external, seen=False,
+            loitering=ev.loitering or None,
             objects=[{"label": o.label, "seconds": round(o.last_seen - o.first_seen, 1),
                       "direction": o.direction(*self._frame_size)}
                      for o in sorted(ev.objects.values(), key=lambda o: o.first_seen)] or None)
@@ -1360,211 +1058,8 @@ class Camera:
                                  name=f"rescan-{self.name}", daemon=True).start()
             else:
                 log.info("[%s] too many clips waiting; %s not searched again", self.name, base)
+                self._later_check_unknown_person(mp4)
         self._check_unknown_plates(ev, plates)
-
-    def _rescan_faces(self, ev: ActiveEvent, mp4: Path, day_dir: Path, base: str,
-                      had_faces: bool) -> None:
-        """After saving, search the whole clip once more: live there are only a few attempts,
-        and a face that briefly looks at the camera often falls in between."""
-        recognizer = self.faces
-        try:
-            with _RESCAN_SLOT:
-                found: list[FaceMatch] = []
-                last = last_body = -RESCAN_BODY_STEP
-                body_area = start_area = ev.body_area
-                with av.open(str(mp4)) as container:
-                    # without thread_type="AUTO": with it, breaking off after RESCAN_MAX_SECONDS hangs
-                    for frame in container.decode(container.streams.video[0]):
-                        t = float(frame.time or 0)
-                        if t > RESCAN_MAX_SECONDS:
-                            break
-                        if t - last < RESCAN_STEP:
-                            continue
-                        last = t
-                        bgr = frame.to_ndarray(format="bgr24")
-                        found += recognizer.analyse(bgr)
-                        if t - last_body >= RESCAN_BODY_STEP:
-                            last_body = t
-                            body_area = self._rescan_body(ev, bgr, body_area)
-            body_better = body_area > start_area
-            if not found and not body_better:
-                return
-            ev.body_area = body_area
-            before = summarize(ev.faces, recognizer.backend.group)
-            live = {id(m) for m in ev.faces}
-            # a real face appears in several frames; a backpack or fabric pattern that looks like
-            # a face in only one: such a single new hit only counts when it is certain
-            groups = [g for g in summarize(ev.faces + found, recognizer.backend.group, limit=16)
-                      if len(g.members) >= RESCAN_MIN_FRAMES or any(id(m) in live for m in g.members)
-                      or (g.name and g.score >= recognizer.backend.learn)][:4]
-            groups = self._check_clothing(groups, ev)
-            old = {(g.name, g.best.quality) for g in self._check_clothing(before, ev)}
-            if {(g.name, g.best.quality) for g in groups} == old and not body_better:
-                return
-            # faces saved live keep their file name: unknown faces and names refer to it;
-            # new faces get the next number
-            faces, used = [], set()
-            n = len(set(ev.face_crops.values()))
-            for g in groups:
-                rel = next((ev.face_crops[id(m)] for m in g.members if id(m) in ev.face_crops), None)
-                if rel is None or rel in used:
-                    n += 1
-                    rel = str((day_dir / f"{base}.face{n}.jpg").relative_to(self.clips_dir))
-                used.add(rel)
-                (self.clips_dir / rel).write_bytes(g.best.crop_jpg)
-                faces.append({"crop": rel, "name": g.name, "score": g.score, "quality": g.best.quality})
-            js = self.store.json_path(str(mp4.relative_to(self.clips_dir)))
-            likely = self._likely_residents(ev, faces)
-            if js:
-                self.store.update(js, {"faces": faces, "likely": likely})
-            if self.mqtt:
-                self._publish_seen(ev.start_wall.isoformat(timespec="seconds"),
-                                   str(mp4.relative_to(self.clips_dir)), faces, likely)
-            log.info("[%s] clip searched again: %s", self.name,
-                     ", ".join(g.name or "unknown" for g in groups))
-            # learn names; only collect unknowns if there was no face at first (else they exist)
-            pairs = [(g, f) for g, f in zip(groups, faces) if g.name or not had_faces]
-            if pairs:
-                self._learn_faces(recognizer, [g for g, _ in pairs], [f for _, f in pairs],
-                                  ev.start_wall)
-        except Exception:  # noqa: BLE001 - must never get in the way of saving
-            log.exception("[%s] searching the clip again failed", self.name)
-        finally:
-            _RESCAN_WAITING.release()
-
-    def _rescan_body(self, ev: ActiveEvent, bgr: np.ndarray, best_area: int) -> int:
-        """Clothing from the saved clip: the largest person in this frame, if larger than what
-        we had (closer = more reliable). Returns the largest area."""
-        if self.bodies is None or self.detector is None:
-            return best_area
-        people = self.detector.detect(bgr, ["person"], float(self.cfg.objects["min_score"]))
-        if not people:
-            return best_area
-        x1, y1, x2, y2 = max((d.box for d in people), key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
-        area = (x2 - x1) * (y2 - y1)
-        if area <= best_area:
-            return best_area
-        emb = self.bodies.embed(bgr[max(0, y1):y2, max(0, x1):x2])
-        if emb is None:
-            return best_area
-        ev.body_emb = emb
-        return area
-
-    def _check_clothing(self, groups: list[FaceGroup], ev: ActiveEvent) -> list[FaceGroup]:
-        """Hold a doubtful name (face below the learning threshold) against today's clothing:
-        if the clothing clearly matches someone else, no name. Only with one person in view,
-        otherwise the clothing may belong to someone else."""
-        if (self.bodies is None or self.faces is None or ev.body_emb is None
-                or ev.max_persons > 1 or not any(g.name for g in groups)):
-            return groups
-        hit = self.bodies.match(ev.body_emb)
-        if hit is None:
-            return groups
-        out = []
-        for g in groups:
-            if g.name and g.name != hit[0] and g.score < self.faces.backend.learn:
-                log.info("[%s] face %s (%.2f) does not match the clothing of %s (%.2f): no name",
-                         self.name, g.name, g.score, *hit)
-                g = replace(g, name=None)
-            out.append(g)
-        return out
-
-    def _recent_arrivals(self, now: float) -> list[str]:
-        """Residents who just arrived home according to HA (within ARRIVAL_WINDOW)."""
-        return sorted(n for n, t in self.arrivals.items() if 0 <= now - t <= ARRIVAL_WINDOW)
-
-    def _likely_residents(self, ev: ActiveEvent, faces: list[dict]) -> list[str] | None:
-        """Person without a recognised face: probably a resident who just arrived home (HA), or
-        someone recognised by face earlier today who wears the same clothes. With a recognised
-        face (and one person in view) we remember the clothing instead."""
-        names = [f["name"] for f in faces if f["name"]]
-        if "person" not in ev.labels:
-            # only a car (resident still in the car, or not seen as a person at night):
-            # whoever just arrived home per HA
-            if "vehicle" in ev.labels:
-                return sorted(set(self._recent_arrivals(ev.start_mono) or self._recent_arrivals(time.monotonic()))) or None
-            return None
-        if names:
-            # only with a certain face: a doubtful name would teach the wrong clothing
-            sure = {f["name"] for f in faces if f["name"] and self.faces is not None
-                    and f["score"] >= self.faces.backend.learn}
-            if (self.bodies is not None and ev.body_emb is not None and ev.max_persons == 1
-                    and len(set(names)) == 1 and sure):
-                self.bodies.remember(names[0], ev.body_emb)
-            return None
-        likely = set(self._recent_arrivals(ev.start_mono) or self._recent_arrivals(time.monotonic()))
-        if self.bodies is not None and ev.body_emb is not None:
-            hit = self.bodies.match(ev.body_emb)
-            if hit:
-                log.info("[%s] probably %s (clothing/build %.2f)", self.name, *hit)
-                likely.add(hit[0])
-        return sorted(likely) or None
-
-    def _check_unknown_plates(self, ev: ActiveEvent, plates: list[dict]) -> None:
-        """Unknown plate: alert immediately at night, during the day only when the vehicle stays."""
-        if self.plates is None or not self.mqtt:
-            return
-        for p in plates:
-            # only named by the AI: may be a mistake, so no alert
-            if p["name"] or not p.get("crop") or self.plates.near_known(p["plate"]):
-                continue
-            info = {"plate": p["plate"], "crop": p["crop"], "start": ev.start_wall.isoformat(timespec="seconds"),
-                    "snapshot_url": f"{self.store.public_url}/clips/{p['crop']}"}
-            hour = ev.start_wall.hour
-            if hour >= NIGHT_HOURS[0] or hour < NIGHT_HOURS[1]:
-                log.info("[%s] unknown vehicle %s at night", self.name, p["plate"])
-                self.mqtt.publish_alert(self.name, "unknown_vehicle",
-                                        {**info, "reason": "night", "visitor": p.get("visitor", 0)})
-            elif p.get("visitor"):   # regular visitor parking during the day: no alert
-                continue
-            elif ev.vehicle_box is not None:
-                with self._lock:
-                    self._plate_watch.append({**info, "box": ev.vehicle_box,
-                                              "due": time.monotonic() + PLATE_PARKED_AFTER})
-
-    def _check_plate_watch(self, now: float) -> None:
-        """(lock already held) Unknown vehicles whose quarter of an hour is up: check in the
-        background whether a vehicle is still at that spot in the current frame."""
-        due = [w for w in self._plate_watch if w["due"] <= now]
-        if due:
-            self._plate_watch = [w for w in self._plate_watch if w["due"] > now]
-            threading.Thread(target=self._check_parked, args=(due,),
-                             name=f"parked-{self.name}", daemon=True).start()
-
-    def _check_parked(self, due: list[dict]) -> None:
-        try:
-            bgr = self.latest_bgr
-            if bgr is None or self.detector is None:
-                return
-            cars = self.detector.detect(bgr.copy(), ["vehicle"], float(self.cfg.objects["min_score"]))
-            for w in due:
-                if any(iou(c.box, w["box"]) >= 0.3 or contained(c.box, w["box"]) >= 0.8
-                       or contained(w["box"], c.box) >= 0.8 for c in cars) and self.mqtt:
-                    log.info("[%s] unknown vehicle %s has been there for 15 minutes", self.name, w["plate"])
-                    self.mqtt.publish_alert(self.name, "unknown_vehicle",
-                                            {k: v for k, v in w.items() if k not in ("box", "due")}
-                                            | {"reason": "parked", "minutes": int(PLATE_PARKED_AFTER // 60)})
-        except Exception:  # noqa: BLE001
-            log.exception("[%s] checking the parked vehicle failed", self.name)
-
-    def _learn_faces(self, recognizer: FaceRecognizer, groups: list, faces: list[dict],
-                     when: datetime) -> None:
-        """After an event: learn confidently recognised faces, collect unknown ones."""
-        fcfg = self.cfg.settings["faces"]
-        for g, f in zip(groups, faces):
-            try:
-                if g.name and fcfg.get("auto_learn", True):
-                    recognizer.learn_auto(g)
-                elif not g.name and fcfg.get("collect_unknown", True):
-                    sid = recognizer.unknown.add(g.best, self.name, when, f["crop"])
-                    group = recognizer.unknown.group_of(sid) if sid else None
-                    # ask who it is: the first time and again when someone keeps coming
-                    if group and group["count"] in ASK_FACE_AT and self.mqtt:
-                        self.mqtt.publish_alert(self.name, "unknown_face", {
-                            "sample": sid, "count": group["count"], "suggestion": group["suggest"],
-                            "names": sorted(recognizer.people())[:8]})
-            except Exception:  # noqa: BLE001 - learning must never get in the way of saving
-                log.exception("[%s] learning the face failed", self.name)
 
     # ------------------------------------------------------------------ MQTT helpers
     def _on_main_online(self, _ok: bool) -> None:

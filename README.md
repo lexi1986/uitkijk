@@ -18,7 +18,10 @@ Everything runs locally; no video goes to the cloud.
   days becomes a "regular visitor" and no longer triggers the daytime alert.
 - **Web page** with recordings per day, search ("package", a name, a plate), daily summary, live view,
   masks and zones, "New" badges for recordings you have not opened, and "Nothing to worry about" to
-  ignore a false alarm from then on.
+  ignore a false alarm from then on. Remove a wrong face or misread plate, delete recordings (one or
+  several at once), and click a name in the daily summary to see exactly those recordings.
+- **Fewer false alerts**: confirmation per tracked object, shape checks, an "Attention" badge from
+  fixed rules, and a last look at face and clothing before a loitering alert.
 - **Archive on a NAS** (optional): recordings move after 48 hours and are kept there longer. What
   the service has learned (faces, plates, parking spots, settings) is backed up there daily too.
 - **Intel iGPU** (optional): object detection and face recognition via OpenVINO.

@@ -842,3 +842,146 @@ def test_face_search_continues_until_everyone_in_view_is_known():
         assert len(started) == 1 and ev.face_attempts == 2
     finally:
         threading.Thread = orig
+
+
+def test_importance_rules():
+    from camsvc.events import EventRecord
+
+    def rec(label="person", start="2026-11-08T14:00:00+01:00", **kw):
+        return EventRecord(id="x", camera="c", label=label, labels=[label], score=.9, start=start,
+                           end=start, duration=5, clip="a.mp4", snapshot=None, **kw).importance()
+    night = "2026-11-08T23:30:00+01:00"
+    known = [{"name": "Sam"}]
+    stranger = [{"name": None}]
+    assert rec()["importance"] == "normal"
+    assert rec(start=night) == {"importance": "high", "importance_reason": "unknown at night"}
+    assert rec(loitering=True)["importance_reason"] == "loitering"
+    assert rec(start=night, faces=known)["importance"] == "low"
+    assert rec(start=night, faces=known + stranger)["importance"] == "high"
+    assert rec(start=night, likely=["Sam"])["importance"] == "low"
+    assert rec(start=night, false_alarm="ai")["importance"] == "low"
+    assert rec("motion", night)["importance"] == "low"
+    plate = [{"plate": "AB-123-C", "name": None}]
+    assert rec("vehicle", night, plates=plate)["importance"] == "high"
+    assert rec("vehicle", plates=plate)["importance"] == "normal"
+    assert rec("vehicle", night, plates=[{"plate": "X", "visitor": 4}])["importance"] == "low"
+    assert rec("vehicle", night)["importance"] == "normal"
+
+
+def test_is_grayscale():
+    from camsvc.faces import is_grayscale
+    assert is_grayscale(np.full((8, 8, 3), 120, np.uint8))
+    assert not is_grayscale(np.full((8, 8, 3), (80, 110, 170), np.uint8))
+
+
+def test_confirmation_is_per_object():
+    from camsvc.tracker import ObjectTrack
+    box = (0, 0, 10, 20)
+    o = ObjectTrack(1, "person", 0.0, 0.0, box, box)
+    o.hits = [(1.0, .9)]
+    assert not o.confirmed(1.0, 3, 2)              # one hit is not enough
+    o.hits = [(1.0, .9), (5.0, .9)]
+    assert not o.confirmed(5.0, 3, 2)              # outside the window
+    o.hits = [(4.0, .9), (5.0, .5)]
+    assert o.confirmed(5.0, 3, 2) and not o.confirmed(5.0, 3, 2, 0.6)
+    o.hits = [(4.0, .7), (5.0, .8)]
+    assert o.confirmed(5.0, 3, 2, 0.6)
+
+
+def test_plausible_shape():
+    from camsvc.tracker import plausible_shape as ok
+    assert ok("person", (100, 100, 150, 220), 640, 360)
+    assert not ok("person", (100, 100, 250, 180), 640, 360)   # much wider than tall
+    assert ok("person", (0, 100, 150, 180), 640, 360)         # cut off by the edge
+    assert not ok("person", (100, 100, 110, 110), 640, 360)   # tiny
+    assert ok("vehicle", (100, 100, 250, 180), 640, 360)
+    assert not ok("vehicle", (100, 50, 130, 200), 640, 360)   # much taller than wide
+
+
+def test_unknown_person():
+    from camsvc.events import unknown_person as u
+    p = {"labels": ["person"]}
+    assert u(p) and u({**p, "faces": [{"name": None}]})
+    assert not u({**p, "faces": [{"name": "Sam"}, {"name": None}]})
+    assert not u({**p, "likely": ["Sam"]})
+    assert not u({**p, "false_alarm": "ai"})
+    assert not u({"labels": ["vehicle"]})
+
+
+def _write_events(tmp_path, events):
+    day = tmp_path / "gate" / "2026-11-02"
+    day.mkdir(parents=True)
+    base = {"camera": "gate", "label": "person", "labels": ["person"], "score": .9, "end": "", "duration": 5,
+            "snapshot": None}
+    for t, extra in events.items():
+        for ext in ("mp4", "jpg", "face1.jpg"):
+            (day / f"{t}_person.{ext}").write_bytes(b"")
+        (day / f"{t}_person.json").write_text(json.dumps(
+            {**base, "id": t, "start": f"2026-11-02T{t[:2]}:00:00+01:00",
+             "clip": f"gate/2026-11-02/{t}_person.mp4", **extra}))
+    return day
+
+
+def test_browse_person_and_plate_match_summary(tmp_path):
+    from camsvc.events import EventStore
+    _write_events(tmp_path, {"100000": {"faces": [{"crop": "x", "name": None}], "likely": ["Sam"]},
+                             "110000": {"faces": [{"crop": "y", "name": None}]},
+                             "120000": {"plates": [{"plate": "AB-123-D"}]}})   # misread AB-123-C
+    store = EventStore(tmp_path, "")
+    ids = lambda **kw: [e["id"] for e in store.browse(None, None, 0, 50, **kw)[0]]
+    assert ids(person="Sam") == ["100000"]
+    assert ids(person="unknown") == ["110000"]
+    assert ids(plate="AB-123-C", names={"AB-123-C": "Our car"}) == ["120000"]
+
+
+def test_delete_event_and_near_filter(tmp_path):
+    from camsvc.events import EventStore
+    day = _write_events(tmp_path, {"100000": {"box": [0.1, 0.1, 0.2, 0.25]}, "110000": {"box": [0.1, 0.1, 0.3, 0.8]}})
+    store = EventStore(tmp_path, "")
+    store.load_recent("gate")
+    ids = lambda **kw: [e["id"] for e in store.browse(None, None, 0, 50, **kw)[0]]
+    assert ids() == ["110000", "100000"] and ids(near=True) == ["110000"]
+    gone = store.delete_event("gate/2026-11-02/110000_person.mp4")
+    assert len(gone) == 4 and "gate/2026-11-02/110000_person.face1.jpg" in gone
+    assert ids() == ["100000"] and [r.id for r in store.recent("gate")] == ["100000"]
+    assert not [p for p in day.iterdir() if p.name.startswith("11")]
+    assert store.delete_event("gate/2026-11-02/110000_person.mp4") == []
+    assert store.delete_event("../../etc/passwd.mp4") == []
+
+
+def test_forget_visit(tmp_path):
+    import threading
+    from datetime import date
+
+    from camsvc.plates import PlateReader
+    reader = PlateReader.__new__(PlateReader)
+    reader._lock, reader._visits_file = threading.Lock(), tmp_path / "visitors.json"
+    reader.visits = {"AB-123-C": ["2026-01-01", "2026-11-02"]}
+    reader.forget_visit("AB-123-C", date(2026, 11, 2))
+    assert reader.visits == {"AB-123-C": ["2026-01-01"]}
+    reader.forget_visit("AB-123-C", date(2026, 1, 1))
+    assert reader.visits == {} and json.loads((tmp_path / "visitors.json").read_text()) == {}
+
+
+def test_loiter_check_clears_known_clothing():
+    import threading
+    from types import SimpleNamespace
+
+    from camsvc.camera import Camera
+    published = []
+
+    def cam(match):
+        return SimpleNamespace(
+            name="c", recorder=SimpleNamespace(grab_frame=lambda: None), faces=None,
+            bodies=SimpleNamespace(match=lambda emb: match), _lock=threading.Lock(),
+            object_active={"person": True}, loitering=False, _loiter_busy=True, _loiter_cleared=None,
+            event=None, tracker=SimpleNamespace(longest=lambda *a: 31.0),
+            _publish_binary=lambda k, v: published.append((k, v)))
+    ev = SimpleNamespace(id="e1", body_emb=object(), loitering=False)
+    known = cam(("Sam", 0.7))
+    Camera._loiter_check(known, ev)
+    assert not known.loitering and known._loiter_cleared == "e1" and not known._loiter_busy and not published
+    stranger = cam(None)
+    stranger.event = ev
+    Camera._loiter_check(stranger, ev)
+    assert stranger.loitering and ev.loitering and published == [("loitering", True)]

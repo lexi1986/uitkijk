@@ -69,6 +69,7 @@ class Service:
             from .auth import Auth
             self.auth = Auth(cfg.state_dir, cfg.auth["rp_id"], cfg.auth["origin"], cfg.auth["session_days"])
         self.detector = self._load_detector()
+        self.zoom_detector = self._load_zoom_detector()
         self.faces = self._load_faces()
         self.plates = self._load_plates()
         # without an MQTT server (no Home Assistant) everything works except the HA integration
@@ -89,6 +90,7 @@ class Service:
         self.bodies = self._load_bodies()
         for cam in self.cameras.values():
             cam.arrivals = self.arrivals
+            cam.zoom_detector = self.zoom_detector
             cam.bodies = self.bodies
             if self.mqtt:
                 cam.weather = self.mqtt.weather
@@ -164,6 +166,20 @@ class Service:
             return ObjectDetector(path, self.cfg.model["device"], size)
         except Exception as exc:  # noqa: BLE001
             log.error("Loading the object model failed (%s); motion detection only", exc)
+            return None
+
+    def _load_zoom_detector(self):
+        """Whole frame with `path` (sharp at a distance), crops with `zoom_path`. Measured on real clips:
+        zoomed in, YOLO11s at 320 px finds as much as at 640; on the whole frame 640 finds clearly
+        more distant people."""
+        zoom = self.cfg.model.get("zoom_path")
+        if not zoom or self.detector is None or getattr(self.detector, "device", None) == "Edge TPU":
+            return None
+        try:
+            from .detector import ObjectDetector
+            return ObjectDetector(zoom, self.cfg.model["device"], int(self.cfg.model["zoom_input_size"]))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Loading zoom model %s failed (%s); crops use the regular model", zoom, exc)
             return None
 
     def _load_plates(self, force: bool = False):

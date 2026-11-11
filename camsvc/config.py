@@ -270,6 +270,8 @@ def load_config(path: str | Path) -> Config:
         "coral_path": None,  # .tflite for the Coral; without a Coral `path` is used
         "device": "AUTO",   # AUTO = GPU first, otherwise CPU
         "input_size": 320,
+        "zoom_path": None,      # own (lighter) model for the crop around motion; empty = `path`
+        "zoom_input_size": 320,
         **raw.get("model", {}),
     }
 

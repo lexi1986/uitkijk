@@ -29,7 +29,8 @@ BINARY_SENSORS = {
     "online": ("Online", "connectivity", "diagnostic"),
 }
 SWITCHES = {"detect": "Detection", "record": "Recording"}
-EVENT_TYPES = ["doorbell", "person", "vehicle", "animal", "motion", "unknown_vehicle", "unknown_face"]
+EVENT_TYPES = ["doorbell", "person", "vehicle", "animal", "motion", "unknown_vehicle", "unknown_face",
+               "unknown_person"]
 
 # Health of the server itself: one JSON message, one sensor per key.
 HEALTH_SENSORS = {
@@ -524,7 +525,7 @@ class MqttBridge:
         self.client.publish(f"{self.prefix}/{cam}/count_{label}", str(n), qos=1, retain=True)
 
     def publish_event(self, cam: str, record: "EventRecord") -> None:
-        payload = {"event_type": record.label, **asdict(record), **record.urls(self.store.public_url)}
+        payload = {"event_type": record.label, **asdict(record), **record.importance(), **record.urls(self.store.public_url)}
         self.client.publish(f"{self.prefix}/{cam}/event", json.dumps(payload), qos=1, retain=False)
         self.publish_recent(cam)
 

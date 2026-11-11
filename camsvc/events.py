@@ -35,6 +35,14 @@ SYNONYMS: dict[str, tuple[str, ...]] = {
     "pram": ("pram", "stroller", "buggy", "pushchair"),
 }
 LAST_N = 20
+NIGHT_HOURS = (22, 7)
+NEAR_FRAC = 0.25      # 'Nearby' filter: same limit as clothing re-identification
+
+
+def unknown_person(data: dict) -> bool:
+    """Saved event with a person who has no name or likely name after all checks."""
+    return ("person" in (data.get("labels") or []) and not data.get("false_alarm") and not data.get("likely")
+            and not any(f.get("name") for f in data.get("faces") or []))
 
 
 @dataclass
@@ -59,6 +67,32 @@ class EventRecord:
     external: dict | None = None      # verdict of the external AI in HA (comparison)
     seen: bool | None = None          # False = new (not opened yet); None = from before this feature
     objects: list[dict] | None = None   # tracked people/vehicles: label, seconds, direction
+    loitering: bool | None = None     # unknown person stayed in view for a long time
+
+    def importance(self) -> dict[str, str | None]:
+        """How important: fixed rules only, the AI does not guess intent. Computed on read, so a
+        name or 'false alarm' given later counts."""
+        hour = datetime.fromisoformat(self.start).hour
+        night = hour >= NIGHT_HOURS[0] or hour < NIGHT_HOURS[1]
+        level, reason = "normal", None
+        if self.false_alarm or self.label in ("motion", "animal"):
+            level = "low"
+        elif "person" in self.labels:
+            faces = self.faces or []
+            unnamed = any(not f.get("name") for f in faces)
+            if (faces and not unnamed) or (self.likely and not faces):
+                level = "low"
+            elif self.loitering:
+                level, reason = "high", "loitering"
+            elif night:
+                level, reason = "high", "unknown at night"
+        elif self.label == "vehicle":
+            plates = self.plates or []
+            if plates and all(p.get("name") or p.get("visitor") for p in plates):
+                level = "low"
+            elif plates and night:
+                level, reason = "high", "unknown vehicle at night"
+        return {"importance": level, "importance_reason": reason}
 
     def urls(self, public_url: str) -> dict[str, str | None]:
         return {
@@ -232,6 +266,63 @@ class EventStore:
                         f["name"] = name
         return True
 
+    def remove_face(self, crop_rel: str) -> tuple[bool, str | None]:
+        """Remove a face from an event (wrong face or name). Returns (found, name)."""
+        js = self.find(crop_rel.split(".face")[0] + ".json") if ".face" in crop_rel else None
+        _, gone = self._remove_items(js, "faces", lambda f: f.get("crop") == crop_rel)
+        return bool(gone), gone[0].get("name") if gone else None
+
+    def remove_plate(self, clip_rel: str, plate: str) -> tuple[dict | None, list[dict]]:
+        """Remove a misread plate from an event. Returns (event, removed reads)."""
+        js = self.json_path(clip_rel) if clip_rel.endswith(".mp4") else None
+        return self._remove_items(js, "plates", lambda p: p.get("plate") == plate)
+
+    def _remove_items(self, js: Path | None, field: str, match) -> tuple[dict | None, list[dict]]:
+        """Remove items from the list `field` of an event, on disk and in the recent list."""
+        if js is None:
+            return None, []
+        with self._file_lock:
+            try:
+                data = json.loads(js.read_text())
+            except (OSError, ValueError):
+                return None, []
+            gone = [x for x in data.get(field) or [] if match(x)]
+            if not gone:
+                return data, []
+            data[field] = [x for x in data[field] if not match(x)] or None
+            self._write(js, data)
+        with self._lock:
+            for r in self._recent.get(data.get("camera", ""), []):
+                items = getattr(r, field)
+                if items and any(match(x) for x in items):
+                    setattr(r, field, [x for x in items if not match(x)] or None)
+        return data, gone
+
+    def delete_event(self, clip_rel: str) -> list[str]:
+        """Delete a recording with everything that belongs to it (video, JSON, crops). Returns the
+        removed paths relative to clips_dir; empty = not found."""
+        js = self.json_path(clip_rel) if clip_rel.endswith(".mp4") else None
+        if js is None:
+            return []
+        gone = []
+        with self._file_lock:
+            for f in js.parent.glob(js.stem + ".*"):   # <time>_<label>.mp4/.jpg/.json/.faceN.jpg/.plateN.jpg
+                f.unlink(missing_ok=True)
+                gone.append(f"{js.parent.parent.name}/{js.parent.name}/{f.name}")
+            self._cache.pop(str(js), None)
+        with self._lock:
+            for cam, dq in self._recent.items():
+                self._recent[cam] = deque((r for r in dq if r.clip != clip_rel), maxlen=LAST_N)
+        return gone
+
+    def _near(self, js: Path) -> bool:
+        """Object fills at least NEAR_FRAC of the frame height (not a passer-by far away)."""
+        try:
+            box = self._read(js).get("box")
+        except (OSError, ValueError):
+            return True
+        return not box or box[3] - box[1] >= NEAR_FRAC
+
     def recent(self, camera: str) -> list[EventRecord]:
         """Newest first."""
         with self._lock:
@@ -251,7 +342,7 @@ class EventStore:
                offset: int = 0, limit: int = 60,
                person: str | None = None, plate: str | None = None, q: str | None = None,
                names: dict[str, str] | None = None, day: str | None = None,
-               important: bool = False) -> tuple[list[dict], int]:
+               important: bool = False, near: bool = False) -> tuple[list[dict], int]:
         """All events on disk, newest first, for the web page. Filters on camera and label via
         the path (<camera>/<date>/<time>_<label>[_n].json), so only the JSON files of the
         requested page need to be read."""
@@ -268,9 +359,11 @@ class EventStore:
             # files within the retention period)
             found = [f for f in found if self._has_person(f[2], person)]
         if plate:
-            found = [f for f in found if self._has_plate(f[2], plate)]
+            found = [f for f in found if self._has_plate(f[2], plate, names or {})]
         if important:
             found = [f for f in found if self._important(f[2], names or {})]
+        if near:
+            found = [f for f in found if self._near(f[2])]
         if q:
             terms = [t for t in q.lower().split() if t][:6]
             found = [f for f in found if self._matches(f[2], terms, names or {})]
@@ -281,7 +374,7 @@ class EventStore:
             except Exception:  # noqa: BLE001
                 log.warning("Cannot read %s", js)
                 continue
-            page.append(asdict(r))
+            page.append(asdict(r) | r.importance())
         return page, len(found)
 
     def days(self, camera: str | None = None, label: str | None = None) -> list[dict]:
@@ -296,15 +389,16 @@ class EventStore:
     def _has_person(self, js: Path, person: str) -> bool:
         """person = a name, 'unknown' (face without a name) or 'known' (someone recognised)."""
         try:
-            faces = self._read(js).get("faces") or []
+            data = self._read(js)
         except (OSError, ValueError):
             return False
-        names = [f.get("name") for f in faces]
+        names = [f.get("name") for f in data.get("faces") or []]
+        likely = [] if any(names) else data.get("likely") or []   # the way the day summary counts
         if person == "unknown":
-            return bool(names) and not any(names)
+            return bool(names) and not any(names) and not likely
         if person == "known":
-            return any(names)
-        return person in names
+            return any(names) or bool(likely)
+        return person in names or person in likely
 
     def _important(self, js: Path, names: dict[str, str]) -> bool:
         """Everything except probable false alarms and your own car coming or going (vehicle
@@ -345,17 +439,20 @@ class EventStore:
         return all(any(a in text or a.replace("-", "") in text for a in SYNONYMS.get(t, (t,)))
                    for t in terms)
 
-    def _has_plate(self, js: Path, plate: str) -> bool:
+    def _has_plate(self, js: Path, plate: str, names: dict[str, str]) -> bool:
+        """Also a misread variant of a known plate, like the day summary."""
+        from .plates import closest_known
         try:
             plates = self._read(js).get("plates") or []
         except (OSError, ValueError):
             return False
-        return any(p.get("plate") == plate for p in plates)
+        return any(p.get("plate") == plate or (plate in names and closest_known(p.get("plate", ""), names) == plate)
+                   for p in plates)
 
     def as_payload(self, camera: str) -> list[dict]:
         out = []
         for r in self.recent(camera):
-            d = asdict(r)
+            d = asdict(r) | r.importance()
             d.update(r.urls(self.public_url))
             out.append(d)
         return out

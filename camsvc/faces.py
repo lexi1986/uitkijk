@@ -33,6 +33,8 @@ RECOGNIZER_FILE = "face_recognition_sface_2021dec.onnx"
 ARCFACE_FILE = "w600k_r50.onnx"
 DETECT_SCORE = 0.6        # YuNet: 0.8 misses most faces filmed from above or at a distance
 MIN_FACE_PX = 36          # smaller faces are too unreliable
+WEAK_DETECT, WEAK_NORM, WEAK_SCORE, WEAK_MARGIN = 0.7, 20.0, 0.4, 0.2   # count a side view anyway, see confirmed_weak
+WEAK_RUN, WEAK_GAP = 3, 1.1  # measured on 105 clips: 0 names on false/vehicle clips, 0 conflicts with certain names
 MIN_QUALITY = 0.2         # below this no usable face (back of a head, blurry, from the side)
 # ArcFace gives a real, sharp face a long feature vector; wood, fabric and blobs that YuNet
 # took for a face stayed below ~15, real faces were mostly above 16
@@ -45,6 +47,7 @@ ID_RE = re.compile(r"[0-9a-f]{12}")
 AUTO_MAX = 50             # automatically learned photos per person (oldest are dropped); more variety: cap, dusk, from above
 AUTO_QUALITY = 0.5        # only learn good images ...
 AUTO_MARGIN = 0.15        # ... that clearly belong to one person
+FORGET_SAME = 0.92        # this similar = the same photo (another image of the same person: ~0.5-0.8)
 AUTO_DUPLICATE = 0.85     # already this similar to an existing photo: adds nothing
 UNKNOWN_QUALITY = 0.3     # do not keep worse unknown faces
 UNKNOWN_MAX = 400
@@ -77,6 +80,7 @@ class FaceMatch:
     margin: float = 0.0       # lead over the best other person
     embedding: np.ndarray | None = field(default=None, repr=False)
     norm: float = 0.0         # length of the ArcFace vector before normalising (0 = unknown)
+    weak: bool = False        # below MIN_QUALITY, only counts through confirmed_weak
 
 
 @dataclass
@@ -90,6 +94,25 @@ class FaceGroup:
 
 def valid_name(name: str) -> bool:
     return bool(NAME_RE.match(name)) and name.strip() == name
+
+
+def confirmed_weak(weak: list[tuple[float, "FaceMatch"]]) -> list["FaceMatch"]:
+    """From (time, side view) keep only what got the same name several times in a row:
+    a stray leaf that looks like someone does not come back like that."""
+    out: list[FaceMatch] = []
+    for name in {m.name for _, m in weak}:
+        run: list[tuple[float, FaceMatch]] = []
+        for t, m in sorted(((t, m) for t, m in weak if m.name == name), key=lambda x: x[0]):
+            if run and t - run[-1][0] > WEAK_GAP:
+                out += [r for _, r in run] if len(run) >= WEAK_RUN else []
+                run = []
+            run.append((t, m))
+        out += [r for _, r in run] if len(run) >= WEAK_RUN else []
+    return out
+
+
+def is_grayscale(bgr: np.ndarray) -> bool:
+    return float(np.abs(bgr[..., 0].astype(np.int16) - bgr[..., 2]).mean()) < 3
 
 
 def face_quality(face: np.ndarray, aligned: np.ndarray) -> float:
@@ -389,6 +412,9 @@ class FaceRecognizer:
         if not name or not cands:
             return False
         m = max(cands, key=lambda c: c.score * c.quality)
+        crop = cv2.imdecode(np.frombuffer(m.crop_jpg, np.uint8), cv2.IMREAD_COLOR)
+        if crop is None or is_grayscale(crop):   # infrared looks like everyone and blurs the gallery
+            return False
         with self._lock:
             own = self._mat[[i for i, n in enumerate(self._names) if n == name]]
         if len(own) and float((own @ m.embedding).max()) >= AUTO_DUPLICATE:
@@ -401,6 +427,24 @@ class FaceRecognizer:
         self.reload()
         log.info("Learned face of %s (score %.2f, quality %.2f)", name, m.score, m.quality)
         return True
+
+    def forget_like(self, name: str, crop_jpg: bytes) -> int:
+        """Remove photos of `name` that are (nearly) the same image as this crop: what was learned
+        from, or assigned from, a wrongly recognised face. Returns how many."""
+        img = cv2.imdecode(np.frombuffer(crop_jpg, np.uint8), cv2.IMREAD_COLOR)
+        if img is None or not valid_name(name):
+            return 0
+        v = self._raw_embed(img)
+        v = v / max(float(np.linalg.norm(v)), 1e-6)
+        n = 0
+        for who, sid, auto, path in self._samples():
+            other = cv2.imread(str(path)) if who == name else None
+            if other is None:
+                continue
+            w = self._raw_embed(other)
+            if float(v @ (w / max(float(np.linalg.norm(w)), 1e-6))) >= FORGET_SAME and self.remove(name, sid, auto):
+                n += 1
+        return n
 
     def remove(self, name: str, sample_id: str | None = None, auto: bool = False) -> bool:
         if not valid_name(name):
@@ -423,8 +467,9 @@ class FaceRecognizer:
         return True
 
     # ------------------------------------------------------------------ recognition
-    def analyse(self, bgr: np.ndarray) -> list[FaceMatch]:
-        """All faces in a (cropped) image, with the best matching name."""
+    def analyse(self, bgr: np.ndarray, keep_weak: bool = False) -> list[FaceMatch]:
+        """All faces in a (cropped) image, with the best matching name. keep_weak: also
+        side views below MIN_QUALITY when strongly recognised (marked as weak)."""
         h, w = bgr.shape[:2]
         scale = min(1.0, DETECT_MAX_SIDE / max(h, w))
         small = cv2.resize(bgr, (int(w * scale), int(h * scale))) if scale < 1 else bgr
@@ -445,7 +490,8 @@ class FaceRecognizer:
             with self._lock:
                 aligned = self._sface.alignCrop(bgr, face)
             quality = face_quality(face, aligned)
-            if quality < MIN_QUALITY:
+            weak = quality < MIN_QUALITY
+            if weak and not (keep_weak and self.backend is ARCFACE and face[14] >= WEAK_DETECT):
                 continue
             raw = self._raw_embed(aligned)
             norm = float(np.linalg.norm(raw))
@@ -453,11 +499,13 @@ class FaceRecognizer:
                 continue
             emb = raw / max(norm, 1e-6)
             name, score, margin = self.identify(emb)
+            if weak and not (name and norm >= WEAK_NORM and score >= WEAK_SCORE and margin >= WEAK_MARGIN):
+                continue
             ok, buf = cv2.imencode(".jpg", aligned, [cv2.IMWRITE_JPEG_QUALITY, 92])
             if not ok:
                 continue
             out.append(FaceMatch(name, score, buf.tobytes(), quality, margin, emb,
-                                 norm if self.backend is ARCFACE else 0.0))
+                                 norm if self.backend is ARCFACE else 0.0, weak))
         return out
 
 

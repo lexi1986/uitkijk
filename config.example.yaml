@@ -43,6 +43,8 @@ model:
   # coral_path: /opt/camera-service/models/yolo11n_edgetpu.tflite
   device: AUTO                      # only for OpenVINO (.xml): AUTO = iGPU, otherwise CPU
   input_size: 320                   # with OpenVINO on an iGPU, 640 sees people further away (export at 640)
+  # zoom_path: /opt/camera-service/models/yolo11s.xml   # crops around motion use their own (lighter) model
+  # zoom_input_size: 320
 
 # Live view on the web page via go2rtc (included in the Docker setup). Per camera the stream name in
 # go2rtc is the camera name by default; otherwise `live: <name>` on the camera.
