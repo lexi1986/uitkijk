@@ -745,6 +745,11 @@
         const data = await api(query(reset ? 0 : state.items.length, limit));
         if (seq !== loadSeq) return;   // another day or filter was chosen meanwhile: ignore the old answer
         state.items = reset ? data.items : state.items.concat(data.items);
+        if (state.currentEvent) {   // open player: find the same recording in the new list
+          state.current = state.items.findIndex((x) => x.clip === state.currentEvent.clip);
+          $("pPrev").disabled = state.current <= 0;
+          $("pNext").disabled = state.current < 0 || (state.current >= state.items.length - 1 && state.items.length >= state.total);
+        }
         state.total = data.total;
         renderTimeline();
       } catch {
@@ -967,7 +972,7 @@
       loadEvents(); loadDays(); loadSummary(); loadStatus();
     }
     async function deleteCurrent() {
-      const e = state.items[state.current];
+      const e = state.currentEvent;
       if (!e || !confirm("Delete this recording for good? This cannot be undone.")) return;
       if (!await deleteClips([e.clip])) return;
       closePlayer(); state.items = [];
@@ -985,6 +990,13 @@
       const e = state.items[i];
       if (!e) return;
       state.current = i;
+      showEvent(e);
+    }
+    // The player remembers the recording itself, not its place in the list: the list can refresh
+    // under an open player (back to the app, a filter), and an index then pointed at another recording.
+    function showEvent(e) {
+      const i = state.current;
+      state.currentEvent = e;
       if (e.seen === false) { markSeen([e]); renderTimeline(); }
       const l = LABELS[e.label] || LABELS.motion;
       const d = new Date(e.start);
@@ -1011,6 +1023,7 @@
       if (!$("player").open) $("player").showModal();
     }
     async function step(dir) {
+      if (state.current < 0) return;   // the open recording is not (or no longer) in the list
       const i = state.current + dir;
       if (i >= state.items.length && state.items.length < state.total) await loadEvents(false);
       openEvent(i);
@@ -1019,7 +1032,7 @@
       const v = $("pVideo");
       v.pause(); v.removeAttribute("src"); v.load();
       if ($("player").open) $("player").close();
-      state.current = -1;
+      state.current = -1; state.currentEvent = null;
     }
 
     // ---------- faces ----------
@@ -1044,7 +1057,7 @@
         </div>`).join("");
     }
     async function learnFace(k, name) {
-      const e = state.items[state.current];
+      const e = state.currentEvent;
       const f = e?.faces?.[k];
       if (!f) return;
       const r = await fetch(`/api/faces/${encodeURIComponent(name)}`, {
@@ -1120,7 +1133,7 @@
     document.addEventListener("click", async (ev) => {
       const btn = ev.target.closest("[data-plate-del]");
       if (!btn) return;
-      const e = state.items[state.current], plate = btn.dataset.plateDel;
+      const e = state.currentEvent, plate = btn.dataset.plateDel;
       if (!e || !confirm(`Remove plate ${plate} from this recording? This day then no longer counts as a visit.`)) return;
       const r = await fetch("/api/events/remove-plate", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clip: e.clip, plate }),
@@ -1133,7 +1146,7 @@
     document.addEventListener("click", async (ev) => {
       const btn = ev.target.closest("[data-face-del]");
       if (!btn) return;
-      const e = state.items[state.current];
+      const e = state.currentEvent;
       const k = Number(btn.dataset.faceDel), f = e?.faces?.[k];
       if (!f || !confirm(f.name ? `Remove the face of ${f.name} from this recording? Photos of ${f.name} learned from it are forgotten too.` : "Remove this face from this recording?")) return;
       const r = await fetch("/api/events/remove-face", {
@@ -1338,7 +1351,7 @@
 
     // ---------- false alarm ----------
     $("pFalse").addEventListener("click", async () => {
-      const e = state.items[state.current];
+      const e = state.currentEvent;
       if (!e) return;
       $("pFalse").disabled = true;
       try {
@@ -1348,7 +1361,7 @@
         if (!r.ok) throw new Error(r.status);
         const res = await r.json();
         e.false_alarm = res.false_alarm;
-        openEvent(state.current);
+        showEvent(e);
         renderTimeline();
         if (res.spot_learned) $("pSub").textContent += " · this thing in this spot will be ignored from now on";
       } catch { $("pSub").textContent += " · saving failed"; }
@@ -1409,7 +1422,7 @@
       });
       if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || "Saving failed"); return; }
       state.plates.known = (await r.json()).known;
-      const e = state.items[state.current];
+      const e = state.currentEvent;
       if (e) renderPlates(e);
       renderTimeline(); renderChips(); loadStatus();
     }
